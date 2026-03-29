@@ -1,0 +1,14 @@
+{
+	"Targets": [
+		{
+			"Name": "Invisible",
+			"Path": "..\\Source\\Invisible.Target.cs",
+			"Type": "Game"
+		},
+		{
+			"Name": "InvisibleEditor",
+			"Path": "..\\Source\\InvisibleEditor.Target.cs",
+			"Type": "Editor"
+		}
+	]
+}

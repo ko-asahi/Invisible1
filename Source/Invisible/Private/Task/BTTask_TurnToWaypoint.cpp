@@ -1,0 +1,119 @@
+// Fill out your copyright notice in the Description page of Project Settings.
+
+
+#include "Task/BTTask_TurnToWaypoint.h"
+
+#include "AIController.h"
+#include "Enemy/EnemyBase.h"
+#include "Enemy/EnemyAIController.h"
+#include "BehaviorTree/BlackboardComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
+
+
+UBTTask_TurnToWaypoint::UBTTask_TurnToWaypoint()
+{
+	NodeName = TEXT("Turn To Next Waypoint");
+	bNotifyTick = true;
+}
+
+
+EBTNodeResult::Type UBTTask_TurnToWaypoint::ExecuteTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory)
+{
+	AAIController* AIController = OwnerComp.GetAIOwner();
+	AEnemyBase* Enemy = AIController ? Cast<AEnemyBase>(AIController->GetPawn()) : nullptr;
+	if (!AIController || !Enemy || !Enemy->AssignedPatrolPath || Enemy->AssignedPatrolPath->Num() == 0)
+	{
+		return EBTNodeResult::Failed;
+	}
+
+	AActor* TargetPoint = Enemy->GetNextPatrolPoint();
+	if (!TargetPoint) return EBTNodeResult::Failed;
+
+	FBTTask_TurnToWaypointMemory* Memory = reinterpret_cast<FBTTask_TurnToWaypointMemory*>(NodeMemory);
+
+
+	// 预转身阶段：停下并关闭“随移动转向”
+	if (UCharacterMovementComponent* MoveComp = Enemy->GetCharacterMovement())
+	{
+		Memory->bCachedOrientRotationToMovement = MoveComp->bOrientRotationToMovement;
+		Memory->bHasCachedMoveSetting = true;
+		MoveComp->bOrientRotationToMovement = false;
+	}
+	AIController->StopMovement();
+	Enemy->GetCharacterMovement()->StopMovementImmediately();
+
+	const FVector ToTarget = (TargetPoint->GetActorLocation() - Enemy->GetActorLocation()).GetSafeNormal2D();
+	if (ToTarget.IsNearlyZero())
+	{
+		return EBTNodeResult::Succeeded;
+	}
+
+	Memory->TargetYaw = ToTarget.Rotation().Yaw;
+
+	const float CurrentYaw = Enemy->GetActorRotation().Yaw;
+	const float DeltaYaw = FMath::Abs(FMath::FindDeltaAngleDegrees(CurrentYaw, Memory->TargetYaw));
+	if (DeltaYaw < MinTurnAngle)
+	{
+		// 角度很小，不浪费时间停顿
+		return EBTNodeResult::Succeeded;
+	}
+
+	return EBTNodeResult::InProgress;
+}
+void UBTTask_TurnToWaypoint::TickTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory, float DeltaSeconds)
+{
+	AAIController* AIController = OwnerComp.GetAIOwner();
+	AEnemyBase* Enemy = AIController ? Cast<AEnemyBase>(AIController->GetPawn()) : nullptr;
+	if (!Enemy)
+	{
+		FinishLatentTask(OwnerComp, EBTNodeResult::Failed);
+		return;
+	}
+
+	// 检测到兴趣点时立刻中止，确保预转身阶段也可被打断
+	if (UBlackboardComponent* BB = OwnerComp.GetBlackboardComponent())
+	{
+		if (BB->GetValueAsBool(AEnemyAIController::BB_HasInterest))
+		{
+			FinishLatentTask(OwnerComp, EBTNodeResult::Failed);
+			return;
+		}
+	}
+
+	FBTTask_TurnToWaypointMemory* Memory = reinterpret_cast<FBTTask_TurnToWaypointMemory*>(NodeMemory);
+
+	const float CurrentYaw = Enemy->GetActorRotation().Yaw;
+    const float DeltaYaw = FMath::FindDeltaAngleDegrees(CurrentYaw, Memory->TargetYaw); // [-180, 180]
+    const float MaxStep = TurnSpeed * DeltaSeconds;
+    const float Step = FMath::Clamp(DeltaYaw, -MaxStep, MaxStep);
+    const float NewYaw = FRotator::NormalizeAxis(CurrentYaw + Step);
+    Enemy->SetActorRotation(FRotator(0.f, NewYaw, 0.f));
+
+	const float Remain = FMath::Abs(FMath::FindDeltaAngleDegrees(NewYaw, Memory->TargetYaw));
+	if (Remain <= AcceptYawError)
+	{
+		FinishLatentTask(OwnerComp, EBTNodeResult::Succeeded);
+	}
+}
+void UBTTask_TurnToWaypoint::OnTaskFinished(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory, EBTNodeResult::Type TaskResult)
+{
+	Super::OnTaskFinished(OwnerComp, NodeMemory, TaskResult);
+
+	AAIController* AIController = OwnerComp.GetAIOwner();
+	AEnemyBase* Enemy = AIController ? Cast<AEnemyBase>(AIController->GetPawn()) : nullptr;
+	FBTTask_TurnToWaypointMemory* Memory = reinterpret_cast<FBTTask_TurnToWaypointMemory*>(NodeMemory);
+
+	// 结束预转身后恢复，让后续 MoveTo 阶段可边走边转（含避障）
+	if (Enemy && Memory->bHasCachedMoveSetting)
+	{
+		if (UCharacterMovementComponent* MoveComp = Enemy->GetCharacterMovement())
+		{
+			MoveComp->bOrientRotationToMovement = Memory->bCachedOrientRotationToMovement;
+		}
+	}
+}
+
+uint16 UBTTask_TurnToWaypoint::GetInstanceMemorySize() const
+{
+	return sizeof(FBTTask_TurnToWaypointMemory);
+}
