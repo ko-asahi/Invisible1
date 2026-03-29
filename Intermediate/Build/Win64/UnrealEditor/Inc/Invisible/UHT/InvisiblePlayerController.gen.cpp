@@ -368,6 +368,16 @@ struct Z_Construct_UClass_AInvisiblePlayerController_Statics
 		{ "ToolTip", "\xe5\x88\xa0\xe9\x99\xa4\xe5\xb7\xb2\xe9\x94\x81\xe5\xae\x9a\xe8\xb7\xaf\xe5\xbe\x84" },
 #endif
 	};
+	static constexpr UECodeGen_Private::FMetaDataPairParam NewProp_PathDragPixelThreshold_MetaData[] = {
+		{ "Category", "EditMode|Path" },
+#if !UE_BUILD_SHIPPING
+		{ "Comment", "// \xe5\xbd\x93\xe9\xbc\xa0\xe6\xa0\x87\xe4\xbd\x8d\xe7\xa7\xbb\xe8\xb6\x85\xe8\xbf\x87\xe8\xaf\xa5\xe9\x98\x88\xe5\x80\xbc\xe6\x97\xb6\xef\xbc\x8c\xe8\xa7\x86\xe4\xb8\xba\xe6\x8b\x96\xe6\x8b\xbd\n" },
+#endif
+		{ "ModuleRelativePath", "Public/InvisiblePlayerController.h" },
+#if !UE_BUILD_SHIPPING
+		{ "ToolTip", "\xe5\xbd\x93\xe9\xbc\xa0\xe6\xa0\x87\xe4\xbd\x8d\xe7\xa7\xbb\xe8\xb6\x85\xe8\xbf\x87\xe8\xaf\xa5\xe9\x98\x88\xe5\x80\xbc\xe6\x97\xb6\xef\xbc\x8c\xe8\xa7\x86\xe4\xb8\xba\xe6\x8b\x96\xe6\x8b\xbd" },
+#endif
+	};
 	static constexpr UECodeGen_Private::FMetaDataPairParam NewProp_MaxPathEnergy_MetaData[] = {
 		{ "Category", "EditMode|Energy" },
 #if !UE_BUILD_SHIPPING
@@ -497,6 +507,7 @@ struct Z_Construct_UClass_AInvisiblePlayerController_Statics
 	static const UECodeGen_Private::FFloatPropertyParams NewProp_MinPathDistance;
 	static const UECodeGen_Private::FFloatPropertyParams NewProp_PathDebugZOffset;
 	static const UECodeGen_Private::FObjectPropertyParams NewProp_EditRemovePathAction;
+	static const UECodeGen_Private::FFloatPropertyParams NewProp_PathDragPixelThreshold;
 	static const UECodeGen_Private::FFloatPropertyParams NewProp_MaxPathEnergy;
 	static const UECodeGen_Private::FFloatPropertyParams NewProp_CurrentPathEnergy;
 	static const UECodeGen_Private::FFloatPropertyParams NewProp_PathEnergyCostPerUnit;
@@ -556,6 +567,7 @@ const UECodeGen_Private::FFloatPropertyParams Z_Construct_UClass_AInvisiblePlaye
 const UECodeGen_Private::FFloatPropertyParams Z_Construct_UClass_AInvisiblePlayerController_Statics::NewProp_MinPathDistance = { "MinPathDistance", nullptr, (EPropertyFlags)0x0010000000000001, UECodeGen_Private::EPropertyGenFlags::Float, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(AInvisiblePlayerController, MinPathDistance), METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_MinPathDistance_MetaData), NewProp_MinPathDistance_MetaData) };
 const UECodeGen_Private::FFloatPropertyParams Z_Construct_UClass_AInvisiblePlayerController_Statics::NewProp_PathDebugZOffset = { "PathDebugZOffset", nullptr, (EPropertyFlags)0x0010000000000001, UECodeGen_Private::EPropertyGenFlags::Float, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(AInvisiblePlayerController, PathDebugZOffset), METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_PathDebugZOffset_MetaData), NewProp_PathDebugZOffset_MetaData) };
 const UECodeGen_Private::FObjectPropertyParams Z_Construct_UClass_AInvisiblePlayerController_Statics::NewProp_EditRemovePathAction = { "EditRemovePathAction", nullptr, (EPropertyFlags)0x0010000000000015, UECodeGen_Private::EPropertyGenFlags::Object, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(AInvisiblePlayerController, EditRemovePathAction), Z_Construct_UClass_UInputAction_NoRegister, METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_EditRemovePathAction_MetaData), NewProp_EditRemovePathAction_MetaData) };
+const UECodeGen_Private::FFloatPropertyParams Z_Construct_UClass_AInvisiblePlayerController_Statics::NewProp_PathDragPixelThreshold = { "PathDragPixelThreshold", nullptr, (EPropertyFlags)0x0010000000000001, UECodeGen_Private::EPropertyGenFlags::Float, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(AInvisiblePlayerController, PathDragPixelThreshold), METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_PathDragPixelThreshold_MetaData), NewProp_PathDragPixelThreshold_MetaData) };
 const UECodeGen_Private::FFloatPropertyParams Z_Construct_UClass_AInvisiblePlayerController_Statics::NewProp_MaxPathEnergy = { "MaxPathEnergy", nullptr, (EPropertyFlags)0x0010000000000015, UECodeGen_Private::EPropertyGenFlags::Float, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(AInvisiblePlayerController, MaxPathEnergy), METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_MaxPathEnergy_MetaData), NewProp_MaxPathEnergy_MetaData) };
 const UECodeGen_Private::FFloatPropertyParams Z_Construct_UClass_AInvisiblePlayerController_Statics::NewProp_CurrentPathEnergy = { "CurrentPathEnergy", nullptr, (EPropertyFlags)0x0010000000000014, UECodeGen_Private::EPropertyGenFlags::Float, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(AInvisiblePlayerController, CurrentPathEnergy), METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_CurrentPathEnergy_MetaData), NewProp_CurrentPathEnergy_MetaData) };
 const UECodeGen_Private::FFloatPropertyParams Z_Construct_UClass_AInvisiblePlayerController_Statics::NewProp_PathEnergyCostPerUnit = { "PathEnergyCostPerUnit", nullptr, (EPropertyFlags)0x0010000000000015, UECodeGen_Private::EPropertyGenFlags::Float, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(AInvisiblePlayerController, PathEnergyCostPerUnit), METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_PathEnergyCostPerUnit_MetaData), NewProp_PathEnergyCostPerUnit_MetaData) };
@@ -596,6 +608,7 @@ const UECodeGen_Private::FPropertyParamsBase* const Z_Construct_UClass_AInvisibl
 	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UClass_AInvisiblePlayerController_Statics::NewProp_MinPathDistance,
 	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UClass_AInvisiblePlayerController_Statics::NewProp_PathDebugZOffset,
 	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UClass_AInvisiblePlayerController_Statics::NewProp_EditRemovePathAction,
+	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UClass_AInvisiblePlayerController_Statics::NewProp_PathDragPixelThreshold,
 	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UClass_AInvisiblePlayerController_Statics::NewProp_MaxPathEnergy,
 	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UClass_AInvisiblePlayerController_Statics::NewProp_CurrentPathEnergy,
 	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UClass_AInvisiblePlayerController_Statics::NewProp_PathEnergyCostPerUnit,
@@ -648,10 +661,10 @@ struct Z_CompiledInDeferFile_FID_Invisible_Source_Invisible_Public_InvisiblePlay
 		{ FLockedAIPath::StaticStruct, Z_Construct_UScriptStruct_FLockedAIPath_Statics::NewStructOps, TEXT("LockedAIPath"), &Z_Registration_Info_UScriptStruct_FLockedAIPath, CONSTRUCT_RELOAD_VERSION_INFO(FStructReloadVersionInfo, sizeof(FLockedAIPath), 1064708489U) },
 	};
 	static constexpr FClassRegisterCompiledInInfo ClassInfo[] = {
-		{ Z_Construct_UClass_AInvisiblePlayerController, AInvisiblePlayerController::StaticClass, TEXT("AInvisiblePlayerController"), &Z_Registration_Info_UClass_AInvisiblePlayerController, CONSTRUCT_RELOAD_VERSION_INFO(FClassReloadVersionInfo, sizeof(AInvisiblePlayerController), 1225426969U) },
+		{ Z_Construct_UClass_AInvisiblePlayerController, AInvisiblePlayerController::StaticClass, TEXT("AInvisiblePlayerController"), &Z_Registration_Info_UClass_AInvisiblePlayerController, CONSTRUCT_RELOAD_VERSION_INFO(FClassReloadVersionInfo, sizeof(AInvisiblePlayerController), 255813405U) },
 	};
 };
-static FRegisterCompiledInInfo Z_CompiledInDeferFile_FID_Invisible_Source_Invisible_Public_InvisiblePlayerController_h__Script_Invisible_622175388(TEXT("/Script/Invisible"),
+static FRegisterCompiledInInfo Z_CompiledInDeferFile_FID_Invisible_Source_Invisible_Public_InvisiblePlayerController_h__Script_Invisible_193972901(TEXT("/Script/Invisible"),
 	Z_CompiledInDeferFile_FID_Invisible_Source_Invisible_Public_InvisiblePlayerController_h__Script_Invisible_Statics::ClassInfo, UE_ARRAY_COUNT(Z_CompiledInDeferFile_FID_Invisible_Source_Invisible_Public_InvisiblePlayerController_h__Script_Invisible_Statics::ClassInfo),
 	Z_CompiledInDeferFile_FID_Invisible_Source_Invisible_Public_InvisiblePlayerController_h__Script_Invisible_Statics::ScriptStructInfo, UE_ARRAY_COUNT(Z_CompiledInDeferFile_FID_Invisible_Source_Invisible_Public_InvisiblePlayerController_h__Script_Invisible_Statics::ScriptStructInfo),
 	nullptr, 0);

@@ -172,6 +172,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input|EditMode")
 	UInputAction* EditRemovePathAction;
 
+	// 只有鼠标位移超过阈值，才认为是拖拽
+	bool bPathActuallyDragged = false;
+	FVector2D PathDragStartMousePos = FVector2D::ZeroVector;
+
+	// 当鼠标位移超过该阈值时，视为拖拽
+	UPROPERTY(EditAnywhere, Category="EditMode|Path")
+	float PathDragPixelThreshold = 6.0f;
+
 	// =====能量机制=====
 
 	// 最大能量
