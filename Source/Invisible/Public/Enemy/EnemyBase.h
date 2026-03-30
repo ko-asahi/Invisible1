@@ -55,6 +55,26 @@ struct FEnemyAlertConfig
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Perception|Alert", meta=(ClampMin="0.0"))
     float AlertDecayRate = 20.0f;
 
+    // 玩家站立时视觉警戒值增长倍率
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Perception|Alert", meta=(ClampMin="0.0"))
+    float StandGainMultiplier = 1.0f;
+
+    // 玩家行走时视觉警戒值增长倍率
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Perception|Alert", meta=(ClampMin="0.0"))
+    float WalkGainMultiplier = 1.0f;
+
+    // 玩家奔跑时视觉警戒值增长倍率
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Perception|Alert", meta=(ClampMin="0.0"))
+    float RunGainMultiplier = 1.5f;
+
+    // 玩家蹲下时视觉警戒值增长倍率
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Perception|Alert", meta=(ClampMin="0.0"))
+    float CrouchIdleGainMultiplier = 0.3f;
+
+    // 玩家蹲走时视觉警戒值增长倍率
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Perception|Alert", meta=(ClampMin="0.0"))
+    float CrouchWalkGainMultiplier = 0.6f;
+
     // 状态阈值
 
     // 怀疑阈值
