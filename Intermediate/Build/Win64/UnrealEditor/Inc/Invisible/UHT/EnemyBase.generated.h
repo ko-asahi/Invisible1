@@ -26,7 +26,7 @@ struct FEnemyAlertConfig;
 // ********** End ScriptStruct FEnemyAlertConfig ***************************************************
 
 // ********** Begin ScriptStruct FAIInfoData *******************************************************
-#define FID_Invisible_Source_Invisible_Public_Enemy_EnemyBase_h_85_GENERATED_BODY \
+#define FID_Invisible_Source_Invisible_Public_Enemy_EnemyBase_h_105_GENERATED_BODY \
 	friend struct Z_Construct_UScriptStruct_FAIInfoData_Statics; \
 	INVISIBLE_API static class UScriptStruct* StaticStruct();
 
@@ -37,7 +37,7 @@ struct FAIInfoData;
 // ********** Begin Class AEnemyBase ***************************************************************
 INVISIBLE_API UClass* Z_Construct_UClass_AEnemyBase_NoRegister();
 
-#define FID_Invisible_Source_Invisible_Public_Enemy_EnemyBase_h_112_INCLASS_NO_PURE_DECLS \
+#define FID_Invisible_Source_Invisible_Public_Enemy_EnemyBase_h_132_INCLASS_NO_PURE_DECLS \
 private: \
 	static void StaticRegisterNativesAEnemyBase(); \
 	friend struct Z_Construct_UClass_AEnemyBase_Statics; \
@@ -48,7 +48,7 @@ public: \
 	DECLARE_SERIALIZER(AEnemyBase)
 
 
-#define FID_Invisible_Source_Invisible_Public_Enemy_EnemyBase_h_112_ENHANCED_CONSTRUCTORS \
+#define FID_Invisible_Source_Invisible_Public_Enemy_EnemyBase_h_132_ENHANCED_CONSTRUCTORS \
 	/** Deleted move- and copy-constructors, should never be used */ \
 	AEnemyBase(AEnemyBase&&) = delete; \
 	AEnemyBase(const AEnemyBase&) = delete; \
@@ -58,12 +58,12 @@ public: \
 	NO_API virtual ~AEnemyBase();
 
 
-#define FID_Invisible_Source_Invisible_Public_Enemy_EnemyBase_h_109_PROLOG
-#define FID_Invisible_Source_Invisible_Public_Enemy_EnemyBase_h_112_GENERATED_BODY \
+#define FID_Invisible_Source_Invisible_Public_Enemy_EnemyBase_h_129_PROLOG
+#define FID_Invisible_Source_Invisible_Public_Enemy_EnemyBase_h_132_GENERATED_BODY \
 PRAGMA_DISABLE_DEPRECATION_WARNINGS \
 public: \
-	FID_Invisible_Source_Invisible_Public_Enemy_EnemyBase_h_112_INCLASS_NO_PURE_DECLS \
-	FID_Invisible_Source_Invisible_Public_Enemy_EnemyBase_h_112_ENHANCED_CONSTRUCTORS \
+	FID_Invisible_Source_Invisible_Public_Enemy_EnemyBase_h_132_INCLASS_NO_PURE_DECLS \
+	FID_Invisible_Source_Invisible_Public_Enemy_EnemyBase_h_132_ENHANCED_CONSTRUCTORS \
 private: \
 PRAGMA_ENABLE_DEPRECATION_WARNINGS
 

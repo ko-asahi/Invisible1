@@ -135,6 +135,61 @@ struct Z_Construct_UScriptStruct_FEnemyAlertConfig_Statics
 		{ "ToolTip", "\xe8\xa7\x86\xe9\x87\x8e\xe5\xa4\x96\xe8\xad\xa6\xe6\x88\x92\xe5\x80\xbc\xe8\xa1\xb0\xe5\x87\x8f\xe9\x80\x9f\xe7\x8e\x87" },
 #endif
 	};
+	static constexpr UECodeGen_Private::FMetaDataPairParam NewProp_StandGainMultiplier_MetaData[] = {
+		{ "Category", "AI|Perception|Alert" },
+		{ "ClampMin", "0.0" },
+#if !UE_BUILD_SHIPPING
+		{ "Comment", "// \xe7\xab\x99\xe7\xab\x8b\xe6\x97\xb6\xe8\xa7\x86\xe8\xa7\x89\xe8\xad\xa6\xe6\x88\x92\xe5\x80\xbc\xe5\xa2\x9e\xe9\x95\xbf\xe5\x80\x8d\xe7\x8e\x87\n" },
+#endif
+		{ "ModuleRelativePath", "Public/Enemy/EnemyBase.h" },
+#if !UE_BUILD_SHIPPING
+		{ "ToolTip", "\xe7\xab\x99\xe7\xab\x8b\xe6\x97\xb6\xe8\xa7\x86\xe8\xa7\x89\xe8\xad\xa6\xe6\x88\x92\xe5\x80\xbc\xe5\xa2\x9e\xe9\x95\xbf\xe5\x80\x8d\xe7\x8e\x87" },
+#endif
+	};
+	static constexpr UECodeGen_Private::FMetaDataPairParam NewProp_WalkGainMultiplier_MetaData[] = {
+		{ "Category", "AI|Perception|Alert" },
+		{ "ClampMin", "0.0" },
+#if !UE_BUILD_SHIPPING
+		{ "Comment", "// \xe8\xa1\x8c\xe8\xb5\xb0\xe6\x97\xb6\xe8\xa7\x86\xe8\xa7\x89\xe8\xad\xa6\xe6\x88\x92\xe5\x80\xbc\xe5\xa2\x9e\xe9\x95\xbf\xe5\x80\x8d\xe7\x8e\x87\n" },
+#endif
+		{ "ModuleRelativePath", "Public/Enemy/EnemyBase.h" },
+#if !UE_BUILD_SHIPPING
+		{ "ToolTip", "\xe8\xa1\x8c\xe8\xb5\xb0\xe6\x97\xb6\xe8\xa7\x86\xe8\xa7\x89\xe8\xad\xa6\xe6\x88\x92\xe5\x80\xbc\xe5\xa2\x9e\xe9\x95\xbf\xe5\x80\x8d\xe7\x8e\x87" },
+#endif
+	};
+	static constexpr UECodeGen_Private::FMetaDataPairParam NewProp_RunGainMultiplier_MetaData[] = {
+		{ "Category", "AI|Perception|Alert" },
+		{ "ClampMin", "0.0" },
+#if !UE_BUILD_SHIPPING
+		{ "Comment", "// \xe5\xa5\x94\xe8\xb7\x91\xe6\x97\xb6\xe8\xa7\x86\xe8\xa7\x89\xe8\xad\xa6\xe6\x88\x92\xe5\x80\xbc\xe5\xa2\x9e\xe9\x95\xbf\xe5\x80\x8d\xe7\x8e\x87\n" },
+#endif
+		{ "ModuleRelativePath", "Public/Enemy/EnemyBase.h" },
+#if !UE_BUILD_SHIPPING
+		{ "ToolTip", "\xe5\xa5\x94\xe8\xb7\x91\xe6\x97\xb6\xe8\xa7\x86\xe8\xa7\x89\xe8\xad\xa6\xe6\x88\x92\xe5\x80\xbc\xe5\xa2\x9e\xe9\x95\xbf\xe5\x80\x8d\xe7\x8e\x87" },
+#endif
+	};
+	static constexpr UECodeGen_Private::FMetaDataPairParam NewProp_CrouchIdleGainMultiplier_MetaData[] = {
+		{ "Category", "AI|Perception|Alert" },
+		{ "ClampMin", "0.0" },
+#if !UE_BUILD_SHIPPING
+		{ "Comment", "// \xe8\xb9\xb2\xe4\xb8\x8b\xe6\x97\xb6\xe8\xa7\x86\xe8\xa7\x89\xe8\xad\xa6\xe6\x88\x92\xe5\x80\xbc\xe5\xa2\x9e\xe9\x95\xbf\xe5\x80\x8d\xe7\x8e\x87\n" },
+#endif
+		{ "ModuleRelativePath", "Public/Enemy/EnemyBase.h" },
+#if !UE_BUILD_SHIPPING
+		{ "ToolTip", "\xe8\xb9\xb2\xe4\xb8\x8b\xe6\x97\xb6\xe8\xa7\x86\xe8\xa7\x89\xe8\xad\xa6\xe6\x88\x92\xe5\x80\xbc\xe5\xa2\x9e\xe9\x95\xbf\xe5\x80\x8d\xe7\x8e\x87" },
+#endif
+	};
+	static constexpr UECodeGen_Private::FMetaDataPairParam NewProp_CrouchWalkGainMultiplier_MetaData[] = {
+		{ "Category", "AI|Perception|Alert" },
+		{ "ClampMin", "0.0" },
+#if !UE_BUILD_SHIPPING
+		{ "Comment", "// \xe8\xb9\xb2\xe8\xb5\xb0\xe6\x97\xb6\xe8\xa7\x86\xe8\xa7\x89\xe8\xad\xa6\xe6\x88\x92\xe5\x80\xbc\xe5\xa2\x9e\xe9\x95\xbf\xe5\x80\x8d\xe7\x8e\x87\n" },
+#endif
+		{ "ModuleRelativePath", "Public/Enemy/EnemyBase.h" },
+#if !UE_BUILD_SHIPPING
+		{ "ToolTip", "\xe8\xb9\xb2\xe8\xb5\xb0\xe6\x97\xb6\xe8\xa7\x86\xe8\xa7\x89\xe8\xad\xa6\xe6\x88\x92\xe5\x80\xbc\xe5\xa2\x9e\xe9\x95\xbf\xe5\x80\x8d\xe7\x8e\x87" },
+#endif
+	};
 	static constexpr UECodeGen_Private::FMetaDataPairParam NewProp_SuspiciousThreshold_MetaData[] = {
 		{ "Category", "AI|Perception|Alert" },
 		{ "ClampMin", "0.0" },
@@ -199,6 +254,11 @@ struct Z_Construct_UScriptStruct_FEnemyAlertConfig_Statics
 	static const UECodeGen_Private::FFloatPropertyParams NewProp_MidGainRate;
 	static const UECodeGen_Private::FFloatPropertyParams NewProp_FarGainRate;
 	static const UECodeGen_Private::FFloatPropertyParams NewProp_AlertDecayRate;
+	static const UECodeGen_Private::FFloatPropertyParams NewProp_StandGainMultiplier;
+	static const UECodeGen_Private::FFloatPropertyParams NewProp_WalkGainMultiplier;
+	static const UECodeGen_Private::FFloatPropertyParams NewProp_RunGainMultiplier;
+	static const UECodeGen_Private::FFloatPropertyParams NewProp_CrouchIdleGainMultiplier;
+	static const UECodeGen_Private::FFloatPropertyParams NewProp_CrouchWalkGainMultiplier;
 	static const UECodeGen_Private::FFloatPropertyParams NewProp_SuspiciousThreshold;
 	static const UECodeGen_Private::FFloatPropertyParams NewProp_ChaseThreshold;
 	static const UECodeGen_Private::FFloatPropertyParams NewProp_LoseTargetThreshold;
@@ -219,6 +279,11 @@ const UECodeGen_Private::FFloatPropertyParams Z_Construct_UScriptStruct_FEnemyAl
 const UECodeGen_Private::FFloatPropertyParams Z_Construct_UScriptStruct_FEnemyAlertConfig_Statics::NewProp_MidGainRate = { "MidGainRate", nullptr, (EPropertyFlags)0x0010000000000005, UECodeGen_Private::EPropertyGenFlags::Float, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(FEnemyAlertConfig, MidGainRate), METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_MidGainRate_MetaData), NewProp_MidGainRate_MetaData) };
 const UECodeGen_Private::FFloatPropertyParams Z_Construct_UScriptStruct_FEnemyAlertConfig_Statics::NewProp_FarGainRate = { "FarGainRate", nullptr, (EPropertyFlags)0x0010000000000005, UECodeGen_Private::EPropertyGenFlags::Float, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(FEnemyAlertConfig, FarGainRate), METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_FarGainRate_MetaData), NewProp_FarGainRate_MetaData) };
 const UECodeGen_Private::FFloatPropertyParams Z_Construct_UScriptStruct_FEnemyAlertConfig_Statics::NewProp_AlertDecayRate = { "AlertDecayRate", nullptr, (EPropertyFlags)0x0010000000000005, UECodeGen_Private::EPropertyGenFlags::Float, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(FEnemyAlertConfig, AlertDecayRate), METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_AlertDecayRate_MetaData), NewProp_AlertDecayRate_MetaData) };
+const UECodeGen_Private::FFloatPropertyParams Z_Construct_UScriptStruct_FEnemyAlertConfig_Statics::NewProp_StandGainMultiplier = { "StandGainMultiplier", nullptr, (EPropertyFlags)0x0010000000000005, UECodeGen_Private::EPropertyGenFlags::Float, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(FEnemyAlertConfig, StandGainMultiplier), METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_StandGainMultiplier_MetaData), NewProp_StandGainMultiplier_MetaData) };
+const UECodeGen_Private::FFloatPropertyParams Z_Construct_UScriptStruct_FEnemyAlertConfig_Statics::NewProp_WalkGainMultiplier = { "WalkGainMultiplier", nullptr, (EPropertyFlags)0x0010000000000005, UECodeGen_Private::EPropertyGenFlags::Float, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(FEnemyAlertConfig, WalkGainMultiplier), METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_WalkGainMultiplier_MetaData), NewProp_WalkGainMultiplier_MetaData) };
+const UECodeGen_Private::FFloatPropertyParams Z_Construct_UScriptStruct_FEnemyAlertConfig_Statics::NewProp_RunGainMultiplier = { "RunGainMultiplier", nullptr, (EPropertyFlags)0x0010000000000005, UECodeGen_Private::EPropertyGenFlags::Float, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(FEnemyAlertConfig, RunGainMultiplier), METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_RunGainMultiplier_MetaData), NewProp_RunGainMultiplier_MetaData) };
+const UECodeGen_Private::FFloatPropertyParams Z_Construct_UScriptStruct_FEnemyAlertConfig_Statics::NewProp_CrouchIdleGainMultiplier = { "CrouchIdleGainMultiplier", nullptr, (EPropertyFlags)0x0010000000000005, UECodeGen_Private::EPropertyGenFlags::Float, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(FEnemyAlertConfig, CrouchIdleGainMultiplier), METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_CrouchIdleGainMultiplier_MetaData), NewProp_CrouchIdleGainMultiplier_MetaData) };
+const UECodeGen_Private::FFloatPropertyParams Z_Construct_UScriptStruct_FEnemyAlertConfig_Statics::NewProp_CrouchWalkGainMultiplier = { "CrouchWalkGainMultiplier", nullptr, (EPropertyFlags)0x0010000000000005, UECodeGen_Private::EPropertyGenFlags::Float, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(FEnemyAlertConfig, CrouchWalkGainMultiplier), METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_CrouchWalkGainMultiplier_MetaData), NewProp_CrouchWalkGainMultiplier_MetaData) };
 const UECodeGen_Private::FFloatPropertyParams Z_Construct_UScriptStruct_FEnemyAlertConfig_Statics::NewProp_SuspiciousThreshold = { "SuspiciousThreshold", nullptr, (EPropertyFlags)0x0010000000000005, UECodeGen_Private::EPropertyGenFlags::Float, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(FEnemyAlertConfig, SuspiciousThreshold), METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_SuspiciousThreshold_MetaData), NewProp_SuspiciousThreshold_MetaData) };
 const UECodeGen_Private::FFloatPropertyParams Z_Construct_UScriptStruct_FEnemyAlertConfig_Statics::NewProp_ChaseThreshold = { "ChaseThreshold", nullptr, (EPropertyFlags)0x0010000000000005, UECodeGen_Private::EPropertyGenFlags::Float, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(FEnemyAlertConfig, ChaseThreshold), METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_ChaseThreshold_MetaData), NewProp_ChaseThreshold_MetaData) };
 const UECodeGen_Private::FFloatPropertyParams Z_Construct_UScriptStruct_FEnemyAlertConfig_Statics::NewProp_LoseTargetThreshold = { "LoseTargetThreshold", nullptr, (EPropertyFlags)0x0010000000000005, UECodeGen_Private::EPropertyGenFlags::Float, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(FEnemyAlertConfig, LoseTargetThreshold), METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_LoseTargetThreshold_MetaData), NewProp_LoseTargetThreshold_MetaData) };
@@ -233,6 +298,11 @@ const UECodeGen_Private::FPropertyParamsBase* const Z_Construct_UScriptStruct_FE
 	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UScriptStruct_FEnemyAlertConfig_Statics::NewProp_MidGainRate,
 	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UScriptStruct_FEnemyAlertConfig_Statics::NewProp_FarGainRate,
 	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UScriptStruct_FEnemyAlertConfig_Statics::NewProp_AlertDecayRate,
+	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UScriptStruct_FEnemyAlertConfig_Statics::NewProp_StandGainMultiplier,
+	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UScriptStruct_FEnemyAlertConfig_Statics::NewProp_WalkGainMultiplier,
+	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UScriptStruct_FEnemyAlertConfig_Statics::NewProp_RunGainMultiplier,
+	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UScriptStruct_FEnemyAlertConfig_Statics::NewProp_CrouchIdleGainMultiplier,
+	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UScriptStruct_FEnemyAlertConfig_Statics::NewProp_CrouchWalkGainMultiplier,
 	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UScriptStruct_FEnemyAlertConfig_Statics::NewProp_SuspiciousThreshold,
 	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UScriptStruct_FEnemyAlertConfig_Statics::NewProp_ChaseThreshold,
 	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UScriptStruct_FEnemyAlertConfig_Statics::NewProp_LoseTargetThreshold,
@@ -540,7 +610,7 @@ const UECodeGen_Private::FIntPropertyParams Z_Construct_UClass_AEnemyBase_Static
 const UECodeGen_Private::FFloatPropertyParams Z_Construct_UClass_AEnemyBase_Statics::NewProp_PatrolSpeed = { "PatrolSpeed", nullptr, (EPropertyFlags)0x0010000000000005, UECodeGen_Private::EPropertyGenFlags::Float, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(AEnemyBase, PatrolSpeed), METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_PatrolSpeed_MetaData), NewProp_PatrolSpeed_MetaData) };
 const UECodeGen_Private::FFloatPropertyParams Z_Construct_UClass_AEnemyBase_Statics::NewProp_SightRadius = { "SightRadius", nullptr, (EPropertyFlags)0x0010000000000005, UECodeGen_Private::EPropertyGenFlags::Float, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(AEnemyBase, SightRadius), METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_SightRadius_MetaData), NewProp_SightRadius_MetaData) };
 const UECodeGen_Private::FFloatPropertyParams Z_Construct_UClass_AEnemyBase_Statics::NewProp_HalfViewAngle = { "HalfViewAngle", nullptr, (EPropertyFlags)0x0010000000000005, UECodeGen_Private::EPropertyGenFlags::Float, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(AEnemyBase, HalfViewAngle), METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_HalfViewAngle_MetaData), NewProp_HalfViewAngle_MetaData) };
-const UECodeGen_Private::FStructPropertyParams Z_Construct_UClass_AEnemyBase_Statics::NewProp_AlertConfig = { "AlertConfig", nullptr, (EPropertyFlags)0x0010000000000005, UECodeGen_Private::EPropertyGenFlags::Struct, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(AEnemyBase, AlertConfig), Z_Construct_UScriptStruct_FEnemyAlertConfig, METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_AlertConfig_MetaData), NewProp_AlertConfig_MetaData) }; // 1030398055
+const UECodeGen_Private::FStructPropertyParams Z_Construct_UClass_AEnemyBase_Statics::NewProp_AlertConfig = { "AlertConfig", nullptr, (EPropertyFlags)0x0010000000000005, UECodeGen_Private::EPropertyGenFlags::Struct, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(AEnemyBase, AlertConfig), Z_Construct_UScriptStruct_FEnemyAlertConfig, METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_AlertConfig_MetaData), NewProp_AlertConfig_MetaData) }; // 2518641787
 const UECodeGen_Private::FStructPropertyParams Z_Construct_UClass_AEnemyBase_Statics::NewProp_AIInfoData = { "AIInfoData", nullptr, (EPropertyFlags)0x0010000000000005, UECodeGen_Private::EPropertyGenFlags::Struct, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(AEnemyBase, AIInfoData), Z_Construct_UScriptStruct_FAIInfoData, METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_AIInfoData_MetaData), NewProp_AIInfoData_MetaData) }; // 461720737
 const UECodeGen_Private::FObjectPropertyParams Z_Construct_UClass_AEnemyBase_Statics::NewProp_BehaviorTree = { "BehaviorTree", nullptr, (EPropertyFlags)0x0010000000000005, UECodeGen_Private::EPropertyGenFlags::Object, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(AEnemyBase, BehaviorTree), Z_Construct_UClass_UBehaviorTree_NoRegister, METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_BehaviorTree_MetaData), NewProp_BehaviorTree_MetaData) };
 const UECodeGen_Private::FPropertyParamsBase* const Z_Construct_UClass_AEnemyBase_Statics::PropPointers[] = {
@@ -591,14 +661,14 @@ AEnemyBase::~AEnemyBase() {}
 struct Z_CompiledInDeferFile_FID_Invisible_Source_Invisible_Public_Enemy_EnemyBase_h__Script_Invisible_Statics
 {
 	static constexpr FStructRegisterCompiledInInfo ScriptStructInfo[] = {
-		{ FEnemyAlertConfig::StaticStruct, Z_Construct_UScriptStruct_FEnemyAlertConfig_Statics::NewStructOps, TEXT("EnemyAlertConfig"), &Z_Registration_Info_UScriptStruct_FEnemyAlertConfig, CONSTRUCT_RELOAD_VERSION_INFO(FStructReloadVersionInfo, sizeof(FEnemyAlertConfig), 1030398055U) },
+		{ FEnemyAlertConfig::StaticStruct, Z_Construct_UScriptStruct_FEnemyAlertConfig_Statics::NewStructOps, TEXT("EnemyAlertConfig"), &Z_Registration_Info_UScriptStruct_FEnemyAlertConfig, CONSTRUCT_RELOAD_VERSION_INFO(FStructReloadVersionInfo, sizeof(FEnemyAlertConfig), 2518641787U) },
 		{ FAIInfoData::StaticStruct, Z_Construct_UScriptStruct_FAIInfoData_Statics::NewStructOps, TEXT("AIInfoData"), &Z_Registration_Info_UScriptStruct_FAIInfoData, CONSTRUCT_RELOAD_VERSION_INFO(FStructReloadVersionInfo, sizeof(FAIInfoData), 461720737U) },
 	};
 	static constexpr FClassRegisterCompiledInInfo ClassInfo[] = {
-		{ Z_Construct_UClass_AEnemyBase, AEnemyBase::StaticClass, TEXT("AEnemyBase"), &Z_Registration_Info_UClass_AEnemyBase, CONSTRUCT_RELOAD_VERSION_INFO(FClassReloadVersionInfo, sizeof(AEnemyBase), 563321352U) },
+		{ Z_Construct_UClass_AEnemyBase, AEnemyBase::StaticClass, TEXT("AEnemyBase"), &Z_Registration_Info_UClass_AEnemyBase, CONSTRUCT_RELOAD_VERSION_INFO(FClassReloadVersionInfo, sizeof(AEnemyBase), 2618770159U) },
 	};
 };
-static FRegisterCompiledInInfo Z_CompiledInDeferFile_FID_Invisible_Source_Invisible_Public_Enemy_EnemyBase_h__Script_Invisible_2217747603(TEXT("/Script/Invisible"),
+static FRegisterCompiledInInfo Z_CompiledInDeferFile_FID_Invisible_Source_Invisible_Public_Enemy_EnemyBase_h__Script_Invisible_3630019376(TEXT("/Script/Invisible"),
 	Z_CompiledInDeferFile_FID_Invisible_Source_Invisible_Public_Enemy_EnemyBase_h__Script_Invisible_Statics::ClassInfo, UE_ARRAY_COUNT(Z_CompiledInDeferFile_FID_Invisible_Source_Invisible_Public_Enemy_EnemyBase_h__Script_Invisible_Statics::ClassInfo),
 	Z_CompiledInDeferFile_FID_Invisible_Source_Invisible_Public_Enemy_EnemyBase_h__Script_Invisible_Statics::ScriptStructInfo, UE_ARRAY_COUNT(Z_CompiledInDeferFile_FID_Invisible_Source_Invisible_Public_Enemy_EnemyBase_h__Script_Invisible_Statics::ScriptStructInfo),
 	nullptr, 0);

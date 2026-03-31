@@ -20,7 +20,7 @@ class AActor;
 struct FAIStimulus;
 
 // ********** Begin Class AEnemyAIController *******************************************************
-#define FID_Invisible_Source_Invisible_Public_Enemy_EnemyAIController_h_19_RPC_WRAPPERS_NO_PURE_DECLS \
+#define FID_Invisible_Source_Invisible_Public_Enemy_EnemyAIController_h_21_RPC_WRAPPERS_NO_PURE_DECLS \
 	DECLARE_FUNCTION(execExtendInterestHoldTime); \
 	DECLARE_FUNCTION(execClearInvestigateRuntimeState); \
 	DECLARE_FUNCTION(execGetHearingRange); \
@@ -36,7 +36,7 @@ struct FAIStimulus;
 
 INVISIBLE_API UClass* Z_Construct_UClass_AEnemyAIController_NoRegister();
 
-#define FID_Invisible_Source_Invisible_Public_Enemy_EnemyAIController_h_19_INCLASS_NO_PURE_DECLS \
+#define FID_Invisible_Source_Invisible_Public_Enemy_EnemyAIController_h_21_INCLASS_NO_PURE_DECLS \
 private: \
 	static void StaticRegisterNativesAEnemyAIController(); \
 	friend struct Z_Construct_UClass_AEnemyAIController_Statics; \
@@ -47,7 +47,7 @@ public: \
 	DECLARE_SERIALIZER(AEnemyAIController)
 
 
-#define FID_Invisible_Source_Invisible_Public_Enemy_EnemyAIController_h_19_ENHANCED_CONSTRUCTORS \
+#define FID_Invisible_Source_Invisible_Public_Enemy_EnemyAIController_h_21_ENHANCED_CONSTRUCTORS \
 	/** Deleted move- and copy-constructors, should never be used */ \
 	AEnemyAIController(AEnemyAIController&&) = delete; \
 	AEnemyAIController(const AEnemyAIController&) = delete; \
@@ -57,13 +57,13 @@ public: \
 	NO_API virtual ~AEnemyAIController();
 
 
-#define FID_Invisible_Source_Invisible_Public_Enemy_EnemyAIController_h_16_PROLOG
-#define FID_Invisible_Source_Invisible_Public_Enemy_EnemyAIController_h_19_GENERATED_BODY \
+#define FID_Invisible_Source_Invisible_Public_Enemy_EnemyAIController_h_18_PROLOG
+#define FID_Invisible_Source_Invisible_Public_Enemy_EnemyAIController_h_21_GENERATED_BODY \
 PRAGMA_DISABLE_DEPRECATION_WARNINGS \
 public: \
-	FID_Invisible_Source_Invisible_Public_Enemy_EnemyAIController_h_19_RPC_WRAPPERS_NO_PURE_DECLS \
-	FID_Invisible_Source_Invisible_Public_Enemy_EnemyAIController_h_19_INCLASS_NO_PURE_DECLS \
-	FID_Invisible_Source_Invisible_Public_Enemy_EnemyAIController_h_19_ENHANCED_CONSTRUCTORS \
+	FID_Invisible_Source_Invisible_Public_Enemy_EnemyAIController_h_21_RPC_WRAPPERS_NO_PURE_DECLS \
+	FID_Invisible_Source_Invisible_Public_Enemy_EnemyAIController_h_21_INCLASS_NO_PURE_DECLS \
+	FID_Invisible_Source_Invisible_Public_Enemy_EnemyAIController_h_21_ENHANCED_CONSTRUCTORS \
 private: \
 PRAGMA_ENABLE_DEPRECATION_WARNINGS
 
