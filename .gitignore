@@ -361,3 +361,16 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# --- UE5 核心忽略项 ---
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+Build/
+
+# --- 编译器与 IDE 缓存 ---
+.vs/
+*.sln
+*.suo
+*.pdb
