@@ -10,6 +10,8 @@
 #include "Navigation/PathFollowingComponent.h"
 #include "EnemyAIController.generated.h"
 
+class APlayerCharacter;
+
 /**
  * 敌人AI控制器，负责敌人的AI行为和感知
  */
@@ -85,6 +87,22 @@ private:
     // 视野外警戒值衰减速率
     float AlertDecayRate = 20.0f;
 
+    // 玩家站立时视觉警戒值增长倍率
+    float StandGainMultiplier = 1.0f;
+
+    // 玩家行走时视觉警戒值增长倍率
+    float WalkGainMultiplier = 1.0f;
+
+    // 玩家奔跑时视觉警戒值增长倍率
+    float RunGainMultiplier = 1.5f;
+
+    // 玩家蹲下时视觉警戒值增长倍率
+    float CrouchIdleGainMultiplier = 0.3f;
+
+    // 玩家蹲走时视觉警戒值增长倍率
+    float CrouchWalkGainMultiplier = 0.6f;
+
+
     // 状态阈值
 
     // 怀疑阈值
@@ -142,6 +160,9 @@ private:
 
     // 提交最后看到或者听到的位置
     void CommitInterestLocation(const FVector& Location);
+
+    // 获取玩家状态并得出最终警戒值增长倍率
+    float GetPlayerStateAlertMultiplier(const APlayerCharacter* Player) const;
 
     // 视野参数（从 EnemyBase 读取）
     float SightRadius    = 1200.f;

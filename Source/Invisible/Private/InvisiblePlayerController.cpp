@@ -620,6 +620,15 @@ void AInvisiblePlayerController::OnStartPathDrag()
     PreviewEnergyCost = 0.0f;
     DragPawnOldPathCost = 0.0f;
 
+    // 记录鼠标起始位置
+    bPathActuallyDragged = false;
+    PathDragStartMousePos = FVector2D::ZeroVector;
+    float MouseX = 0.f, MouseY = 0.f;
+    if (GetMousePosition(MouseX, MouseY))
+    {
+        PathDragStartMousePos = FVector2D(MouseX, MouseY);
+    }
+
     // 优先检测 Pawn ，防止选中到其他Actor
     FHitResult PawnHit;
     TArray<TEnumAsByte<EObjectTypeQuery>> ObjectTypes;
@@ -692,13 +701,43 @@ void AInvisiblePlayerController::OnStartPathDrag()
     }
 
     UE_LOG(LogTemp, Log, TEXT("开始路径绘制"));
-    UE_LOG(LogTemp, Log, TEXT("选中Actor: %s"), *SelectedActor->GetName());
+    if (SelectedActor)
+    {
+        UE_LOG(LogTemp, Log, TEXT("选中Actor: %s"), *SelectedActor->GetName());
+    }
+    
 }
 
 // 拖拽时更新路径预览
 void AInvisiblePlayerController::OnEditPathDragTriggered()
 {
     if(!bIsEditMode || !bPathDragActive || !DragPawn.IsValid()) return;
+
+    // 如果鼠标位移没有超过阈值，则不认为是拖拽
+    if (!bPathActuallyDragged)
+    {
+        float MouseX = 0.f, MouseY = 0.f;
+        if (GetMousePosition(MouseX, MouseY))
+        {
+            const float PixelMoved = FVector2D::Distance(
+                PathDragStartMousePos,
+                FVector2D(MouseX, MouseY)
+            );
+            bPathActuallyDragged = (PixelMoved >= PathDragPixelThreshold);
+        }
+    }
+
+    // 如果还没达到拖拽阈值：只保持显示，不生成预览、不扣预览能量
+    if (!bPathActuallyDragged)
+    {
+        bHasPreviewPath = false;
+        PreviewTarget = FVector::ZeroVector;
+        PreviewPathPoints.Reset();
+        PreviewPathLength = 0.f;
+        PreviewEnergyCost = 0.f;
+        DisplayPathEnergy = FMath::Clamp(CurrentPathEnergy + DragPawnOldPathCost, 0.f, MaxPathEnergy);
+        return;
+    }
 
     FHitResult GroundHit;
     if(!GetHitResultUnderCursor(ECC_Visibility, false, GroundHit))
@@ -777,6 +816,19 @@ void AInvisiblePlayerController::OnEditPathDragCompleted()
 
     bPathDragActive = false;
 
+    // 防误触提交
+    if (!bPathActuallyDragged)
+    {
+        bHasPreviewPath = false;
+        PreviewTarget = FVector::ZeroVector;
+        PreviewPathPoints.Reset();
+        PreviewPathLength = 0.f;
+        PreviewEnergyCost = 0.f;
+        DragPawnOldPathCost = 0.f;
+        DisplayPathEnergy = CurrentPathEnergy;
+        return;
+    }
+
     if(!DragPawn.IsValid() || !bHasPreviewPath || PreviewPathPoints.Num() < 2)
     {
         bHasPreviewPath = false;
@@ -791,6 +843,7 @@ void AInvisiblePlayerController::OnEditPathDragCompleted()
 
     const APawn* DraggingPawn = DragPawn.Get();
     const int32 Index = FindLockedPathIndexByPawn(DraggingPawn);
+    const float OldCommittedCost = (Index != INDEX_NONE) ? FMath::Max(0.f, LockedAIPaths[Index].EnergyCost) : 0.f;  // 保留旧路径消耗
 
     if(Index == INDEX_NONE)
     {
@@ -811,7 +864,7 @@ void AInvisiblePlayerController::OnEditPathDragCompleted()
         
     }
 
-    CurrentPathEnergy = FMath::Clamp(CurrentPathEnergy - PreviewEnergyCost, 0.f, MaxPathEnergy);
+    CurrentPathEnergy = FMath::Clamp(CurrentPathEnergy + OldCommittedCost - PreviewEnergyCost, 0.f, MaxPathEnergy);
 
     bHasPreviewPath = false;
     PreviewTarget = FVector::ZeroVector;

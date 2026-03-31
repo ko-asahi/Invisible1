@@ -12,6 +12,7 @@
 #include "DrawDebugHelpers.h"
 #include "BrainComponent.h" 
 #include "InvisibleGameStateBase.h"
+#include "Player/PlayerCharacter.h"
 #include "Perception/AISense_Hearing.h"
 
 // Blackboard 键名定义
@@ -86,6 +87,11 @@ void AEnemyAIController::OnPossess(APawn* InPawn)
     LoseTargetThreshold = Cfg.LoseTargetThreshold;
     InvestigateLookDuration = Cfg.InvestigateLookDuration;
     HearingAlertGain        = Cfg.HearingAlertGain;
+    StandGainMultiplier = Cfg.StandGainMultiplier;
+    WalkGainMultiplier = Cfg.WalkGainMultiplier;
+    RunGainMultiplier = Cfg.RunGainMultiplier;
+    CrouchIdleGainMultiplier = Cfg.CrouchIdleGainMultiplier;
+    CrouchWalkGainMultiplier = Cfg.CrouchWalkGainMultiplier;
     // PreLookPauseTime    = Cfg.PreLookPauseTime;
 
     if(Enemy && Enemy->BehaviorTree)
@@ -175,6 +181,8 @@ void AEnemyAIController::StartDetectionTimer()
 void AEnemyAIController::CommitInterestLocation(const FVector& Location)
 {
     UBlackboardComponent* BB = GetBlackboardComponent();
+
+    
     if (!BB) return;
 
     BB->SetValueAsVector(BB_InterestLocation, Location);
@@ -247,6 +255,28 @@ float AEnemyAIController::GetAlertGainRateByDistance(float Distance) const
 }
 
 
+// 获取玩家状态并得出最终警戒值增长倍率
+float AEnemyAIController::GetPlayerStateAlertMultiplier(const APlayerCharacter* Player) const
+{
+    if(!Player) return 1.0f;
+
+    const FGameplayTag RunTag        = FGameplayTag::RequestGameplayTag(FName("State.Movement.Run"));
+    const FGameplayTag WalkTag       = FGameplayTag::RequestGameplayTag(FName("State.Movement.Walk"));
+    const FGameplayTag CrouchWalkTag = FGameplayTag::RequestGameplayTag(FName("State.Movement.CrouchWalk"));
+    const FGameplayTag CrouchIdleTag = FGameplayTag::RequestGameplayTag(FName("State.Movement.CrouchIdle"));
+    const FGameplayTag IdleTag       = FGameplayTag::RequestGameplayTag(FName("State.Movement.Idle"));
+
+    const FGameplayTagContainer& PlayerTags = Player->MovementStateTags;
+
+    if(PlayerTags.HasTagExact(CrouchWalkTag)) return CrouchWalkGainMultiplier;
+    if(PlayerTags.HasTagExact(CrouchIdleTag)) return CrouchIdleGainMultiplier;
+    if(PlayerTags.HasTagExact(RunTag)) return RunGainMultiplier;
+    if(PlayerTags.HasTagExact(WalkTag)) return WalkGainMultiplier;
+    if(PlayerTags.HasTagExact(IdleTag)) return StandGainMultiplier;
+
+    return 1.0f;
+}
+
 // 定时检测玩家是否在视野范围内
 void AEnemyAIController::TickDetection()
 {
@@ -263,11 +293,12 @@ void AEnemyAIController::TickDetection()
     const bool bInSight = IsPlayerInFanSight(Distance);
     const bool bHeardValid = bHasHeardStimulus && (NowTime - LastHeardGameTime <= HearingMaxAge);
     const bool bHasAnyStimulus = bInSight || bHeardValid;
-    ACharacter* Player = Cast<ACharacter>(UGameplayStatics::GetPlayerCharacter(GetWorld(), 0));
+    APlayerCharacter* Player = Cast<APlayerCharacter>(UGameplayStatics::GetPlayerCharacter(GetWorld(), 0));
+    const float PlayerStateMultiplier = GetPlayerStateAlertMultiplier(Player);
 
     // ===== 警戒值更新 =====
     if (bInSight)
-        Alertness += GetAlertGainRateByDistance(Distance) * Dt;
+        Alertness += GetAlertGainRateByDistance(Distance) * PlayerStateMultiplier * Dt;
     else if (bHeardValid)
         Alertness += (HearingAlertGain / FMath::Max(HearingMaxAge, 0.1f)) * Dt;
     else
