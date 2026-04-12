@@ -8,6 +8,7 @@
 #include "Perception/AIPerceptionComponent.h"
 #include "Perception/AISenseConfig_Hearing.h"
 #include "Navigation/PathFollowingComponent.h"
+#include "GameplayTagContainer.h"
 #include "EnemyAIController.generated.h"
 
 class APlayerCharacter;
@@ -52,6 +53,24 @@ public:
     // 设置编辑模式绘制后的临时路径（退出编辑模式后执行）
     UFUNCTION(BlueprintCallable, Category = "AI|InjectedPath")
     void SetInjectedPath(const TArray<FVector>& InPathPoints);
+
+    // ===== ai交互功能 =====
+
+    // 设置待执行互动（在编辑模式结束后，ai行走到目标点执行）
+    UFUNCTION(BlueprintCallable, Category = "AI|Interaction")
+    void SetPendingInteraction(AEnemyBase* TargetAI, FGameplayTag BehaviorTag, float Duration, float ExecutionRadius);
+
+    // 清除待执行互动
+    UFUNCTION(BlueprintCallable, Category="AI|Interaction")
+    void ClearPendingInteraction();
+
+    // 待执行互动开始事件（暴露给蓝图，用于在互动开始时执行动画或者对话等）
+    UFUNCTION(BlueprintImplementableEvent, Category="AI|Interaction")
+    void BP_OnPendingInteractionStarted(AEnemyBase* TargetAI, FGameplayTag BehaviorTag, float Duration);
+    
+    // 待执行互动完成事件（暴露给蓝图，用于在互动完成时执行动画或者对话等）
+    UFUNCTION(BlueprintImplementableEvent, Category="AI|Interaction")
+    void BP_OnPendingInteractionFinished(AEnemyBase* TargetAI, FGameplayTag BehaviorTag);
 
 private:
     // =====视觉警戒值检测相关=====
@@ -140,7 +159,38 @@ private:
 
     // 插入路径完成回调
     void HandleInjectedPathMoveFinished(FAIRequestID RequestID, const FPathFollowingResult& Result);
-    
+
+    // =====编辑模式互动执行（ai行为执行）=====
+
+    // 待执行互动目标
+    TWeakObjectPtr<AEnemyBase> PendingInteractionTarget;
+
+    // 待执行互动行为标签
+    FGameplayTag PendingInteractionBehaviorTag;
+
+    // 待执行互动时长
+    float PendingInteractionDuration = 0.0f;
+
+    // 待执行互动执行距离
+    float PendingInteractionExecutionRadius = 0.0f;
+
+    // 是否存在待执行互动
+    bool bHasPendingInteraction = false;
+
+    // 是否正在执行待执行互动
+    bool bIsRunningPendingInteraction = false;
+
+    // 待执行互动计时器
+    FTimerHandle PendingInteractionTimerHandle;
+
+    // 检查待执行互动是否有效
+    bool HasValidPendingInteraction() const;
+
+    // 开始执行待执行互动
+    void StartPendingInteraction();
+
+    // 完成执行待执行互动
+    void FinishPendingInteraction();
 
 private:
 	class UBehaviorTreeComponent* BehaviorTreeComp;	// 行为树组件
@@ -257,8 +307,25 @@ public:
     // 保证 TickDetection 的自动清理不会在任务结束前提前触发
     UFUNCTION(BlueprintCallable, Category="AI|Perception|Investigate")
     void ExtendInterestHoldTime(float Duration);
+
+
+// ===== 状态机 =====
+private:
+    // AI状态标签缓存
+    FGameplayTag Tag_AI_Idle;
+    FGameplayTag Tag_AI_Patrol;
+    FGameplayTag Tag_AI_AlertLook;
+    FGameplayTag Tag_AI_AlertMove;
+    FGameplayTag Tag_AI_Fire;   // 预留，用于游戏结束（失败）时播放
+
+    // 初始化状态标签
+    void InitAIStateTags();
+
+    // 更新状态标签
+    void UpdateAIStateTags();
     
-    
+public:
+
 
 
     // Blackboard 键名
@@ -280,4 +347,5 @@ public:
     static const FName BB_PreLookPauseTime;
     static const FName BB_InterestLocation;
     static const FName BB_HasInterest;
+    static const FName BB_IsFiring;
 };

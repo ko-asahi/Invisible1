@@ -8,13 +8,16 @@
 #include "InputActionValue.h"
 #include "Camera/EditModeCamera.h"
 #include "Enemy/AIInfoPanelWidget.h"
-
+#include "Enemy/Interaction/AIInteractionTypes.h"
 
 #include "InvisiblePlayerController.generated.h"
 
 /**
  * 
  */
+
+
+
 
 // 保存单个ai路径
 USTRUCT()
@@ -27,6 +30,33 @@ struct FLockedAIPath
 
 	float PathLength = 0.0f;	// 路径长度
 	float EnergyCost = 0.0f;	// 能量消耗
+
+	// =====ai交互功能相关=====
+
+	// 目标交互对象
+	TWeakObjectPtr<AActor> TargetActor;
+
+	// 是否为交互路径
+	bool bIsInteractionPath = false;
+
+	// 可选行为列表
+	TArray<FInteractionActionOption> CandidateActions;
+
+
+	// 是否已确认要执行的行为
+	bool bActionConfirmed = false;
+
+	// 已确认要执行的行为的Tag
+	FGameplayTag ConfirmedActionTag;
+
+	// 已确认要执行的行为的能量消耗
+	float ConfirmedActionCost = 0.0f;
+
+	// 已确认要执行的行为的执行距离
+	float ConfirmedExecutionRadius = 0.0f;
+
+	// 已确认要执行的行为的持续时长
+	float ConfirmedDuration = 0.0f;
 };
 
 UCLASS()
@@ -220,6 +250,22 @@ public:
 	UAIInfoPanelWidget* AIInfoPanelInstance = nullptr;
 
 
+	// ===== ai交互功能 =====
+
+	// 交互行为默认的资产
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="EditMode|Interaction")
+	class UTraitActionProfile* TraitActionProfile = nullptr;
+
+	// ai头上最多显示多少个按钮
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EditMode|Interaction", meta = (ClampMin="1",ClampMax = "5"))
+	int32 MaxInteractionButtons = 3;
+
+	// 拖拽预览交互相关
+	bool bHasPreviewInteraction = false;	// 是否存在预览交互
+	TWeakObjectPtr<AActor> PreviewInteractionTargetActor;    // 预览交互目标对象
+	TArray<FInteractionActionOption> PreviewCandidateActions;   // 预览可选行为列表
+
+
 
 
 protected:
@@ -342,6 +388,39 @@ protected:
 
 	// 隐藏ai单位信息面板
 	void HideAIInfoPanel();
+
+
+	// ===== ai交互功能 =====
+	// 清除预览交互
+	void ClearPreviewInteraction();
+
+	// 解析预览交互
+	void ResolvePreviewInteractionUnderCursor();
+
+	// 建立交互候选行为列表
+	bool BuildInteractionCandidates(
+		class AEnemyBase* SourceAI,
+		AActor* TargetActor,
+		TArray<FInteractionActionOption>& OutActions) const;
+
+	// 交互行为选择句柄
+	UFUNCTION()
+	void OnInteractionActionChosen(
+		FInteractionActionOption ActionData,
+		AEnemyBase* SourceAI,
+		AEnemyBase* TargetAI);
+
+	// 注册ai交互委托
+	void RegisterEnemyInteractionDelegates();
+
+	// 注销ai交互委托
+	void UnregisterEnemyInteractionDelegates();
+
+	// 隐藏所有ai头顶交互按钮
+	void HideAllInteractionButtons();
+
+	// 查找从 SourceAI 到 TargetAI 的互动路径
+	int32 FindLockedInteractionPathIndex(const AEnemyBase* SourceAI, const AEnemyBase* TargetAI) const; 
 
 private:
 	// 生成相机实例(运行时)

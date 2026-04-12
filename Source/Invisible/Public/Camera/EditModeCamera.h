@@ -9,6 +9,8 @@
 #include <GameFramework/SpringArmComponent.h>
 #include <Camera/CameraComponent.h>
 #include <Components/SceneComponent.h>
+#include "Components/StaticMeshComponent.h"
+#include "GameFramework/SpringArmComponent.h"
 #include "EditModeCamera.generated.h"
 
 /**
@@ -34,12 +36,25 @@ public:
 
 
 public:
+	// 根组件
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Components")
+	USceneComponent* Root;
+
+	// 相机旋转圆心
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Components")
+	USceneComponent* CameraPivot;
+
+	// 弹簧臂
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Components")
+	USpringArmComponent* CameraBoom;
+
+
 	// 相机组件
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Components")
 	UCameraComponent* Camera;
 
 	// 鼠标投影指示器组件
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Components");
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Components")
 	UStaticMeshComponent* GroundRingMesh;
 
 	// 生成时相机俯视角
@@ -55,8 +70,8 @@ public:
 	float CameraOrbitSpeed = 0.3f;
 
 
-	// 初始化位置与朝向
-	void InitializeCamera(const FVector& Location, float InitialYaw);
+	// 初始化朝向（仅初始化Yaw，不改变位置）
+	void InitializeCamera(float InitialYaw);
 
 	// 每帧更新相机位置
 	// 相机平移

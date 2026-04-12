@@ -34,6 +34,7 @@ const FName AEnemyAIController::BB_LookCenterYaw = TEXT("LookCenterYaw");
 const FName AEnemyAIController::BB_PreLookPauseTime = TEXT("PreLookPauseTime");
 const FName AEnemyAIController::BB_InterestLocation = TEXT("InterestLocation");
 const FName AEnemyAIController::BB_HasInterest = TEXT("HasInterest");
+const FName AEnemyAIController::BB_IsFiring = TEXT("IsFiring");
 
 
 AEnemyAIController::AEnemyAIController()
@@ -142,6 +143,11 @@ void AEnemyAIController::OnPossess(APawn* InPawn)
             GS->OnGlobalHearingRangeChanged.AddDynamic(this, &AEnemyAIController::HandleGlobalHearingRangeChanged);
         }
     }
+
+    // 初始化状态标签
+    InitAIStateTags();
+
+    Enemy->SetAIStateTag(Tag_AI_Idle);
 }
 
 // 停止定时视野检测
@@ -153,6 +159,7 @@ void AEnemyAIController::OnUnPossess()
     }
 
     GetWorldTimerManager().ClearTimer(DetectionTimerHandle);
+    GetWorldTimerManager().ClearTimer(PendingInteractionTimerHandle);
     Super::OnUnPossess();
 }
 
@@ -418,6 +425,9 @@ void AEnemyAIController::TickDetection()
     }
 
     bWasInSightLastTick = bInSight;
+
+    // 每帧同步AI状态Tag
+    UpdateAIStateTags();
 }
 
 // 判断玩家是否在视野范围内
@@ -648,6 +658,14 @@ void AEnemyAIController::FinishInjectedPathAndResumePatrol()
     InjectedPathPoints.Reset();
     InjectedPathIndex = INDEX_NONE;
 
+    // 若有待执行互动，优先进入互动，不立刻恢复巡逻
+    if (HasValidPendingInteraction())
+    {
+        StartPendingInteraction();
+        UE_LOG(LogTemp, Log, TEXT("插入路径结束，进入待执行互动行为"));
+        return;
+    }
+
     if (UBrainComponent* Brain = GetBrainComponent())
     {
         Brain->RestartLogic();
@@ -682,4 +700,151 @@ void AEnemyAIController::ClearInvestigateRuntimeState(bool bClearHeardMemory)
         LastHeardLocation = FVector::ZeroVector;
         LastHeardGameTime = -1.0f;
     }
+}
+
+
+// ===== 编辑模式互动执行（ai行为执行） =====
+// 设置待执行互动
+void AEnemyAIController::SetPendingInteraction(AEnemyBase* TargetAI, FGameplayTag BehaviorTag, float Duration, float ExecutionRadius)
+{
+    PendingInteractionTarget = TargetAI;
+    PendingInteractionBehaviorTag = BehaviorTag;
+    PendingInteractionDuration = FMath::Max(0.0f, Duration);
+    PendingInteractionExecutionRadius = FMath::Max(0.0f, ExecutionRadius);
+    bHasPendingInteraction = TargetAI != nullptr;
+}
+
+// 清除待执行互动
+void AEnemyAIController::ClearPendingInteraction()
+{
+    bHasPendingInteraction = false;
+    bIsRunningPendingInteraction = false;
+
+    PendingInteractionTarget.Reset();
+    PendingInteractionBehaviorTag = FGameplayTag();
+    PendingInteractionDuration = 0.0f;
+    PendingInteractionExecutionRadius = 0.0f;
+
+    GetWorldTimerManager().ClearTimer(PendingInteractionTimerHandle);
+}
+
+// 检查路径是否有效
+bool AEnemyAIController::HasValidPendingInteraction() const
+{
+    return bHasPendingInteraction && PendingInteractionTarget.IsValid();
+}
+
+// 开始执行待执行互动
+void AEnemyAIController::StartPendingInteraction()
+{
+    // 路径无效时，清理待执行互动
+    if (!HasValidPendingInteraction())
+    {
+        ClearPendingInteraction();
+        if (UBrainComponent* Brain = GetBrainComponent())
+        {
+            Brain->RestartLogic();
+        }
+        return;
+    }
+
+    bIsRunningPendingInteraction = true;
+
+    // 互动期间停止移动，停止检测，避免状态机覆盖
+    StopMovement();
+    GetWorldTimerManager().ClearTimer(DetectionTimerHandle);
+
+    if (UBrainComponent* Brain = GetBrainComponent())
+    {
+        Brain->StopLogic(TEXT("执行编辑模式互动行为"));
+    }
+
+    if (AEnemyBase* SelfEnemy = Cast<AEnemyBase>(GetPawn()))
+    {
+        // 直接用行为Tag作为状态Tag，方便在蓝图里根据Tag切动画
+        if (PendingInteractionBehaviorTag.IsValid())
+        {
+            SelfEnemy->SetAIStateTag(PendingInteractionBehaviorTag);
+        }
+    }
+
+    BP_OnPendingInteractionStarted(PendingInteractionTarget.Get(), PendingInteractionBehaviorTag, PendingInteractionDuration);
+    // 设置计时器，确保互动时长不会因为AI状态机暂停而中断
+    const float SafeDuration = FMath::Max(PendingInteractionDuration, 0.1f);
+    GetWorldTimerManager().SetTimer(
+        PendingInteractionTimerHandle,
+        this,
+        &AEnemyAIController::FinishPendingInteraction,
+        SafeDuration,
+        false
+    );
+}
+
+// 完成执行待执行互动
+void AEnemyAIController::FinishPendingInteraction()
+{
+    AEnemyBase* TargetEnemy = PendingInteractionTarget.Get();
+    const FGameplayTag BehaviorTag = PendingInteractionBehaviorTag;
+
+    BP_OnPendingInteractionFinished(TargetEnemy, BehaviorTag);
+
+    ClearPendingInteraction();
+
+    // 完成互动，恢复常规巡逻ai
+    StartDetectionTimer();
+    if(UBrainComponent* Brain = GetBrainComponent())
+    {
+        Brain->RestartLogic();
+    }
+    UE_LOG(LogTemp, Log, TEXT("编辑模式互动完成，恢复常规巡逻ai"));
+}
+
+
+// ===== 状态机 =====
+// 初始化状态标签
+void AEnemyAIController::InitAIStateTags()
+{
+    Tag_AI_Idle = FGameplayTag::RequestGameplayTag(FName("State.AI.Idle"));
+    Tag_AI_Patrol = FGameplayTag::RequestGameplayTag(FName("State.AI.Patrol"));
+    Tag_AI_AlertLook = FGameplayTag::RequestGameplayTag(FName("State.AI.Alert.LookAtInterest"));
+    Tag_AI_AlertMove = FGameplayTag::RequestGameplayTag(FName("State.AI.Alert.MoveToInterest"));
+    Tag_AI_Fire = FGameplayTag::RequestGameplayTag(FName("State.AI.Combat.Fire"));
+}
+
+// 更新状态标签
+void AEnemyAIController::UpdateAIStateTags()
+{
+    UBlackboardComponent* BB = GetBlackboardComponent();
+    AEnemyBase* Enemy = Cast<AEnemyBase>(GetPawn());
+    if (!BB || !Enemy) return;
+
+    const bool bIsFiring       = BB->GetValueAsBool(BB_IsFiring);
+    const bool bHasInterest    = BB->GetValueAsBool(BB_HasInterest);
+    const bool bInvestigating  = BB->GetValueAsBool(BB_IsInvestigating);
+    const bool bIsChasing      = BB->GetValueAsBool(BB_IsChasing);
+
+    const float Speed2D = GetPawn() ? GetPawn()->GetVelocity().Size2D() : 0.f;
+    const bool bIsMoving = Speed2D > 10.f;
+
+    FGameplayTag NewTag = Tag_AI_Idle;
+
+    // 优先级：Fire > LookAtInterest > MoveToInterest > Patrol > Idle
+    if (bIsFiring)
+    {
+        NewTag = Tag_AI_Fire;
+    }
+    else if (bHasInterest && bInvestigating)
+    {
+        NewTag = Tag_AI_AlertLook;
+    }
+    else if (bHasInterest && !bInvestigating && bIsChasing)
+    {
+        NewTag = Tag_AI_AlertMove;
+    }
+    else if (bIsMoving)
+    {
+        NewTag = Tag_AI_Patrol;
+    }
+    
+    Enemy->SetAIStateTag(NewTag);
 }

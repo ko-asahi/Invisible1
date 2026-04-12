@@ -12,13 +12,33 @@ AEditModeCamera::AEditModeCamera()
  	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = false;	// 编辑模式相机不进行Tick更新,逻辑由PlayerController控制
 
-	// 以SceneComponent为根节点
-	USceneComponent* Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
+	// 根节点
+	Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 	RootComponent = Root;
+
+	// 相机旋转圆心
+	CameraPivot = CreateDefaultSubobject<USceneComponent>(TEXT("CameraPivot"));
+	CameraPivot->SetupAttachment(RootComponent);
+	CameraPivot->SetRelativeLocation(FVector(0.0f, 0.0f, 300.0f));
+
+
+	// 弹簧臂
+	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
+	CameraBoom->SetupAttachment(CameraPivot);
+	CameraBoom->TargetArmLength = 1000.0f;
+	CameraBoom->SetRelativeRotation(FRotator(-45.0f, 0.0f, 0.0f));
+	CameraBoom->bDoCollisionTest = false;
+	CameraBoom->bUsePawnControlRotation = false;
+
+
+
+	// 以SceneComponent为根节点
+	// USceneComponent* Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
+	// RootComponent = Root;
 
 	// 相机组件
 	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
-	Camera->SetupAttachment(RootComponent);
+	Camera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 
 	// 鼠标投影指示器组件
 	GroundRingMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("GroundRingMesh"));
@@ -32,7 +52,7 @@ AEditModeCamera::AEditModeCamera()
 void AEditModeCamera::BeginPlay()
 {
 	Super::BeginPlay();
-	
+	ApplyRotation();
 }
 
 // Called every frame
@@ -43,11 +63,11 @@ void AEditModeCamera::Tick(float DeltaTime)
 }
 
 
-// 初始化位置与朝向
-void AEditModeCamera::InitializeCamera(const FVector& Location, float InitialYaw)
+// 初始化朝向（新版，不改变位置）
+void AEditModeCamera::InitializeCamera(float InitialYaw)
 {
 	CurrentYaw = InitialYaw;
-	SetActorLocation(Location);
+	// SetActorLocation(Location);
 	ApplyRotation();
 }
 
@@ -93,5 +113,15 @@ void AEditModeCamera::UpdateGroundRing(APlayerController* PC)
 // 应用旋转
 void AEditModeCamera::ApplyRotation()
 {
-	SetActorRotation(FRotator(CameraPitch, CurrentYaw, 0.0f));
+	// SetActorRotation(FRotator(CameraPitch, CurrentYaw, 0.0f));
+	if(CameraPivot)
+	{
+		CameraPivot->SetWorldRotation(FRotator(0.0f, CurrentYaw, 0.0f));
+	}
+	if(CameraBoom)
+	{
+		FRotator BoomRot = CameraBoom->GetRelativeRotation();
+		BoomRot.Pitch = CameraPitch;
+		CameraBoom->SetRelativeRotation(BoomRot);
+	}
 }
