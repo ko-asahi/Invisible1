@@ -1423,11 +1423,11 @@ bool AInvisiblePlayerController::BuildInteractionCandidates(AEnemyBase* SourceAI
             UniqueActionTags.Add(Resolved.ActionTag);
 
             FInteractionActionOption NewOption;
-            NewOption.ActionTag = Resolved.ActionTag;
             NewOption.ButtonText = Resolved.ButtonText;
-            NewOption.EnergyCost = FMath::Max(0.0f, Resolved.EnergyCost);
-            NewOption.ExecutionRadius = FMath::Max(0.0f, Resolved.ExecutionRadius);
-            NewOption.Duration = FMath::Max(0.0f, Resolved.Duration);
+            NewOption.Spec.ActionTag = Resolved.ActionTag;
+            NewOption.Spec.EnergyCost = FMath::Max(0.0f, Resolved.EnergyCost);
+            NewOption.Spec.ExecutionRadius = FMath::Max(0.0f, Resolved.ExecutionRadius);
+            NewOption.Spec.Duration = FMath::Max(0.0f, Resolved.Duration);
 
             OutActions.Add(MoveTemp(NewOption));
 
@@ -1498,7 +1498,7 @@ void AInvisiblePlayerController::OnInteractionActionChosen(
 
     // 获取路径并对比新路径与旧路径能量消耗
     FLockedAIPath& Path = LockedAIPaths[PathIndex];
-    const float NewCost = FMath::Max(0.0f, ActionData.EnergyCost);
+    const float NewCost = FMath::Max(0.0f, ActionData.Spec.EnergyCost);
     const float OldCost = Path.bActionConfirmed ? FMath::Max(0.0f, Path.ConfirmedActionCost) : 0.0f;
     const float DeltaCost = NewCost - OldCost; // >0 需要额外扣能，<0 返还差额
 
@@ -1512,10 +1512,10 @@ void AInvisiblePlayerController::OnInteractionActionChosen(
     DisplayPathEnergy = CurrentPathEnergy;
 
     Path.bActionConfirmed = true;
-    Path.ConfirmedActionTag = ActionData.ActionTag;
+    Path.ConfirmedActionTag = ActionData.Spec.ActionTag;
     Path.ConfirmedActionCost = NewCost;
-    Path.ConfirmedExecutionRadius = FMath::Max(0.0f, ActionData.ExecutionRadius);
-    Path.ConfirmedDuration = FMath::Max(0.0f, ActionData.Duration);
+    Path.ConfirmedExecutionRadius = FMath::Max(0.0f, ActionData.Spec.ExecutionRadius);
+    Path.ConfirmedDuration = FMath::Max(0.0f, ActionData.Spec.Duration);
 
     // 点击后隐藏按钮
     HideAllInteractionButtons();
@@ -1524,8 +1524,8 @@ void AInvisiblePlayerController::OnInteractionActionChosen(
     UE_LOG(LogTemp, Log, TEXT("交互行为选择: Source=%s Target=%s Action=%s Cost=%.2f"),
         SourceAI ? *SourceAI->GetName() : TEXT("None"),
         TargetAI ? *TargetAI->GetName() : TEXT("None"),
-        *ActionData.ActionTag.ToString(),
-        ActionData.EnergyCost);
+        *ActionData.Spec.ActionTag.ToString(),
+        ActionData.Spec.EnergyCost);
 }
 
 
