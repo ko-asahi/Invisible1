@@ -96,7 +96,7 @@ void AInvisiblePlayerController::SetupInputComponent()
 
     if(!EnhancedInputComponent)
     {
-        //UE_LOG(LogTemp, Log, TEXT("增强输入组件为空"));
+        UE_LOG(LogTemp, Log, TEXT("增强输入组件为空"));
         return;
     }
 
@@ -109,7 +109,7 @@ void AInvisiblePlayerController::SetupInputComponent()
         }
         else
         {
-            //UE_LOG(LogTemp, Log, TEXT("SwitchModeAction或SwitchModeMappingContext为null"));
+            UE_LOG(LogTemp, Log, TEXT("SwitchModeAction或SwitchModeMappingContext为null"));
         }
     }
 
@@ -201,7 +201,7 @@ void AInvisiblePlayerController::SwitchMode()
         // 生成之前先判断类是否已在蓝图中设置
         if(!EditModeCameraClass)
         {
-            //UE_LOG(LogTemp, Warning, TEXT("EditModeCameraClass 未设置，请在蓝图中指定"));
+            UE_LOG(LogTemp, Warning, TEXT("EditModeCameraClass 未设置，请在蓝图中指定"));
             
             return;
         }
@@ -265,7 +265,7 @@ void AInvisiblePlayerController::SwitchMode()
         // 隐藏所有ai头顶交互按钮
         HideAllInteractionButtons();
 
-        //UE_LOG(LogTemp, Log, TEXT("切换为编辑模式"));
+        UE_LOG(LogTemp, Log, TEXT("切换为编辑模式"));
     }
 
     // 退出编辑模式
@@ -374,7 +374,7 @@ void AInvisiblePlayerController::SwitchMode()
         // 开始能量回复延时
         StartEnergyRegenWithDelay();
 
-        //UE_LOG(LogTemp, Log, TEXT("切换为跟随模式"));
+        UE_LOG(LogTemp, Log, TEXT("切换为跟随模式"));
     }
 
     UE_LOG(LogTemp, Log, TEXT("编辑模式判定参数值: %d"), bIsEditMode);
@@ -391,7 +391,7 @@ void AInvisiblePlayerController::UpdateInputContext()
 
             if(!Subsystem)
             {
-                //UE_LOG(LogTemp, Log, TEXT("增强输入子系统为空"));
+                UE_LOG(LogTemp, Log, TEXT("增强输入子系统为空"));
                 return;
             }
 
@@ -401,7 +401,7 @@ void AInvisiblePlayerController::UpdateInputContext()
             if(SwitchModeMappingContext)
             {
                 Subsystem->AddMappingContext(SwitchModeMappingContext, 0);
-                //UE_LOG(LogTemp, Log, TEXT("切换功能增强输入激活"));
+                UE_LOG(LogTemp, Log, TEXT("切换功能增强输入激活"));
             }
 
             if(bIsEditMode)
@@ -410,7 +410,7 @@ void AInvisiblePlayerController::UpdateInputContext()
                 {
                     // 添加编辑模式增强输入
                     Subsystem->AddMappingContext(EditModeMappingContext, 0);
-                    //UE_LOG(LogTemp, Log, TEXT("切换为编辑模式"));
+                    UE_LOG(LogTemp, Log, TEXT("切换为编辑模式"));
                 }
             }
 
@@ -420,7 +420,7 @@ void AInvisiblePlayerController::UpdateInputContext()
                 {
                     // 添加跟随模式增强输入
                     Subsystem->AddMappingContext(FollowMappingContext, 0);
-                    //UE_LOG(LogTemp, Log, TEXT("切换为跟随模式"));
+                    UE_LOG(LogTemp, Log, TEXT("切换为跟随模式"));
                 }
             }
         }
@@ -469,7 +469,7 @@ void AInvisiblePlayerController::OnRotateHoldStarted()
 {
     bRotateHeld = true;
 
-    //UE_LOG(LogTemp, Log, TEXT("镜头旋转启动"));
+    UE_LOG(LogTemp, Log, TEXT("镜头旋转启动"));
 }
 
 // 旋转状态结束
@@ -477,7 +477,7 @@ void AInvisiblePlayerController::OnRotateHoldCompleted()
 {
     bRotateHeld = false;
 
-    //UE_LOG(LogTemp, Log, TEXT("镜头旋转结束"));
+    UE_LOG(LogTemp, Log, TEXT("镜头旋转结束"));
 }
 
 // 相机旋转
@@ -514,12 +514,12 @@ void AInvisiblePlayerController::OnCrouchToggle()
         }
 
         PlayerCharacter->Crouch();
-        //UE_LOG(LogTemp, Log, TEXT("角色蹲下"));
+        UE_LOG(LogTemp, Log, TEXT("角色蹲下"));
     }
     else
     {
         PlayerCharacter->UnCrouch();
-        //UE_LOG(LogTemp, Log, TEXT("角色起立"));
+        UE_LOG(LogTemp, Log, TEXT("角色起立"));
     }
 }
 
@@ -540,7 +540,7 @@ void AInvisiblePlayerController::OnRunStarted()
 
     PlayerCharacter->bIsRunning = true;
 
-    //UE_LOG(LogTemp, Log, TEXT("奔跑开始"));
+    UE_LOG(LogTemp, Log, TEXT("奔跑开始"));
 }
 
 
@@ -557,7 +557,7 @@ void AInvisiblePlayerController::OnRunCompleted()
     PlayerCharacter->GetCharacterMovement()->MaxWalkSpeed = PlayerCharacter->NormalWalkSpeed;
     PlayerCharacter->bIsRunning = false;
 
-    //UE_LOG(LogTemp, Log, TEXT("奔跑结束"));
+    UE_LOG(LogTemp, Log, TEXT("奔跑结束"));
     
 }
 
@@ -584,7 +584,7 @@ void AInvisiblePlayerController::OnEditRotateHoldStarted()
     // 按住旋转键时隐藏光标
     //bShowMouseCursor = false;
 
-    //UE_LOG(LogTemp, Log, TEXT("镜头旋转启动"));
+    UE_LOG(LogTemp, Log, TEXT("镜头旋转启动"));
 }
 
 // 每帧检测旋转按键是否被按住（配合 Tick 末尾重置）
@@ -604,7 +604,7 @@ void AInvisiblePlayerController::OnEditRotateHoldCompleted()
 
     //bShowMouseCursor = true;
 
-    //UE_LOG(LogTemp, Log, TEXT("镜头旋转结束"));
+    UE_LOG(LogTemp, Log, TEXT("镜头旋转结束"));
 }
 
 // 旋转输入
@@ -638,7 +638,7 @@ void AInvisiblePlayerController::OnEditSelect()
             // 预留
         }
         SelectedActor = HitActor;
-        //UE_LOG(LogTemp, Log, TEXT("编辑模式选中: %s"), *HitActor->GetName());
+        UE_LOG(LogTemp, Log, TEXT("编辑模式选中: %s"), *HitActor->GetName());
     }
     else
     {
@@ -648,7 +648,7 @@ void AInvisiblePlayerController::OnEditSelect()
             // 预留
         }
         SelectedActor = nullptr;
-        //UE_LOG(LogTemp, Log, TEXT("编辑模式取消选中"));
+        UE_LOG(LogTemp, Log, TEXT("编辑模式取消选中"));
     }
 }
 
@@ -698,7 +698,7 @@ void AInvisiblePlayerController::OnStartPathDrag()
                 
                 DragPawn = HitPawn;
                 bPathDragActive = true;
-                //UE_LOG(LogTemp, Log, TEXT("开始路径绘制: %s"), *HitPawn->GetName());
+                UE_LOG(LogTemp, Log, TEXT("开始路径绘制: %s"), *HitPawn->GetName());
 
                 // 记录旧路径消耗
                 const int32 OldIndex = FindLockedPathIndexByPawn(HitPawn);
@@ -718,7 +718,7 @@ void AInvisiblePlayerController::OnStartPathDrag()
                 // 其他 Pawn（例如玩家）只选中，不拖拽
                 
                 DisplayPathEnergy = CurrentPathEnergy;
-                //UE_LOG(LogTemp, Log, TEXT("选中非AI Pawn: %s"), *HitPawn->GetName());
+                UE_LOG(LogTemp, Log, TEXT("选中非AI Pawn: %s"), *HitPawn->GetName());
 
                 // 隐藏敌方信息面板
                 HideAIInfoPanel();
@@ -735,7 +735,7 @@ void AInvisiblePlayerController::OnStartPathDrag()
 
         if(SelectedActor)
         {
-            //UE_LOG(LogTemp, Log, TEXT("选中Actor: %s"), *SelectedActor->GetName());
+            UE_LOG(LogTemp, Log, TEXT("选中Actor: %s"), *SelectedActor->GetName());
         }
         
 
@@ -746,16 +746,16 @@ void AInvisiblePlayerController::OnStartPathDrag()
     {
         // 点空白则取消选中
         SelectedActor = nullptr;
-        //UE_LOG(LogTemp, Log, TEXT("编辑模式取消选中"));
+        UE_LOG(LogTemp, Log, TEXT("编辑模式取消选中"));
 
         // 隐藏敌方信息面板
         HideAIInfoPanel();
     }
 
-    //UE_LOG(LogTemp, Log, TEXT("开始路径绘制"));
+    UE_LOG(LogTemp, Log, TEXT("开始路径绘制"));
     if (SelectedActor)
     {
-        //UE_LOG(LogTemp, Log, TEXT("选中Actor: %s"), *SelectedActor->GetName());
+        UE_LOG(LogTemp, Log, TEXT("选中Actor: %s"), *SelectedActor->GetName());
     }
     
 }
@@ -866,7 +866,7 @@ void AInvisiblePlayerController::OnEditPathDragTriggered()
     DisplayPathEnergy = FMath::Clamp(CurrentPathEnergy + DragPawnOldPathCost - PreviewEnergyCost, 0.f, MaxPathEnergy);
     ResolvePreviewInteractionUnderCursor();
 
-    //UE_LOG(LogTemp, Log, TEXT("路径预览更新"));
+    UE_LOG(LogTemp, Log, TEXT("路径预览更新"));
 }
 
 // 拖拽结束，保留路径直到编辑模式关闭
@@ -909,11 +909,11 @@ void AInvisiblePlayerController::OnEditPathDragCompleted()
 
     const bool bInteractionValid = bHasPreviewInteraction && PreviewInteractionTargetActor.IsValid() && PreviewCandidateActions.Num() > 0;
     
-   /* UE_LOG(LogAIInteractionDebug, Log, TEXT("[绘制完成] 绘制交互路径 bHasPreviewInteraction=%d TargetValid=%d CandidateNum=%d => bInteractionValid=%d"),
+    UE_LOG(LogAIInteractionDebug, Log, TEXT("[绘制完成] 绘制交互路径 bHasPreviewInteraction=%d TargetValid=%d CandidateNum=%d => bInteractionValid=%d"),
     bHasPreviewInteraction ? 1 : 0,
     PreviewInteractionTargetActor.IsValid() ? 1 : 0,
     PreviewCandidateActions.Num(),
-    bInteractionValid ? 1 : 0);*/
+    bInteractionValid ? 1 : 0);
 
     if(Index == INDEX_NONE)
     {
@@ -946,9 +946,9 @@ void AInvisiblePlayerController::OnEditPathDragCompleted()
         if (bInteractionValid && SourceEnemy && TargetEnemy)
         {
             const TArray<FInteractionActionOption>& Actions = (Index == INDEX_NONE) ? LockedAIPaths.Last().CandidateActions : LockedAIPaths[Index].CandidateActions;
-            /*UE_LOG(LogAIInteractionDebug, Log, TEXT("[绘制完成] 尝试显示按钮 Source=%s Target=%s ActionsNum=%d"),
+             UE_LOG(LogAIInteractionDebug, Log, TEXT("[绘制完成] 尝试显示按钮 Source=%s Target=%s ActionsNum=%d"),
             *GetNameSafe(SourceEnemy), *GetNameSafe(TargetEnemy), Actions.Num());
-            TargetEnemy->ShowInteractionButtons(Actions, SourceEnemy);*/
+            TargetEnemy->ShowInteractionButtons(Actions, SourceEnemy);
         }
     }
     else
@@ -994,7 +994,7 @@ void AInvisiblePlayerController::OnEditPathDragCompleted()
     DisplayPathEnergy = CurrentPathEnergy;
     ClearPreviewInteraction();
 
-    //UE_LOG(LogTemp, Log, TEXT("路径拖拽结束"));
+    UE_LOG(LogTemp, Log, TEXT("路径拖拽结束"));
 }
 
 // 绘制路径
@@ -1019,7 +1019,7 @@ void AInvisiblePlayerController::OnRemoveSelectedAIPath()
     const APawn* SelectedPawn = Cast<APawn>(SelectedActor);
     if(!SelectedPawn || !Cast<AEnemyBase>(SelectedPawn))
     {
-        //UE_LOG(LogTemp, Log, TEXT("未选中AI Pawn,不删除路径"));
+        UE_LOG(LogTemp, Log, TEXT("未选中AI Pawn,不删除路径"));
         return;
     }
 
@@ -1047,7 +1047,7 @@ void AInvisiblePlayerController::OnRemoveSelectedAIPath()
 
     if(RemovedCount <= 0)
     {
-        //UE_LOG(LogTemp, Log, TEXT("该AI没有可删除路径: %s"), *SelectedPawn->GetName());
+        UE_LOG(LogTemp, Log, TEXT("该AI没有可删除路径: %s"), *SelectedPawn->GetName());
         return;
     }
 
@@ -1077,7 +1077,7 @@ void AInvisiblePlayerController::OnRemoveSelectedAIPath()
     //RefreshCurrentPathEnergy();
     if(SelectedPawn)
     {
-        //UE_LOG(LogTemp, Log, TEXT("已删除AI路径: %s, 删除数量: %d"), *SelectedPawn->GetName(), RemovedCount);
+        UE_LOG(LogTemp, Log, TEXT("已删除AI路径: %s, 删除数量: %d"), *SelectedPawn->GetName(), RemovedCount);
     }
     
 }
@@ -1206,7 +1206,7 @@ void AInvisiblePlayerController::StartEnergyRegenWithDelay()
         false
     );
 
-    //UE_LOG(LogTemp, Log, TEXT("能量回复延时启动，延迟: %f秒"), EnergyRegenDelay);
+    UE_LOG(LogTemp, Log, TEXT("能量回复延时启动，延迟: %f秒"), EnergyRegenDelay);
 }
 
 // 开始能量回复
@@ -1252,7 +1252,7 @@ void AInvisiblePlayerController::ShowAIInfoPanel(AEnemyBase* InEnemy)
     AIInfoPanelInstance->UpdateAIInfo(PanelData, InEnemy);
     AIInfoPanelInstance->SetVisibility(ESlateVisibility::Visible);
 
-    //UE_LOG(LogTemp, Log, TEXT("显示敌方信息面板"));
+    UE_LOG(LogTemp, Log, TEXT("显示敌方信息面板"));
 }
 
 // 隐藏ai单位信息面板
@@ -1275,13 +1275,13 @@ void AInvisiblePlayerController::ClearPreviewInteraction()
 // 解析预览交互
 void AInvisiblePlayerController::ResolvePreviewInteractionUnderCursor()
 {
-    //UE_LOG(LogAIInteractionDebug, Log, TEXT("[解析预览交互] DragPawn=%s bHasPreviewPath=%d"),*GetNameSafe(DragPawn.Get()), bHasPreviewPath ? 1 : 0);
+    UE_LOG(LogAIInteractionDebug, Log, TEXT("[解析预览交互] DragPawn=%s bHasPreviewPath=%d"),*GetNameSafe(DragPawn.Get()), bHasPreviewPath ? 1 : 0);
 
     ClearPreviewInteraction();
     
     if(!DragPawn.IsValid() || !bHasPreviewPath)
     {
-        //UE_LOG(LogAIInteractionDebug, Warning, TEXT("[解析预览交互] 条件不满足，返回"));
+        UE_LOG(LogAIInteractionDebug, Warning, TEXT("[解析预览交互] 条件不满足，返回"));
         return;
     }
 
@@ -1297,20 +1297,20 @@ void AInvisiblePlayerController::ResolvePreviewInteractionUnderCursor()
 
     const bool bHitPawn = GetHitResultUnderCursorForObjects(ObjectTypes, false, PawnHit);
 
-    /*UE_LOG(LogAIInteractionDebug, Log, TEXT("[解析预览交互] bHitPawn=%d HitActor=%s"),
-    bHitPawn ? 1 : 0, *GetNameSafe(PawnHit.GetActor()));*/
+    UE_LOG(LogAIInteractionDebug, Log, TEXT("[解析预览交互] bHitPawn=%d HitActor=%s"),
+    bHitPawn ? 1 : 0, *GetNameSafe(PawnHit.GetActor()));
 
     if(!bHitPawn)
     {
-        //UE_LOG(LogAIInteractionDebug, Warning, TEXT("[解析预览交互] return，鼠标下没有Pawn"));
+        UE_LOG(LogAIInteractionDebug, Warning, TEXT("[解析预览交互] return，鼠标下没有Pawn"));
         return;
     }
 
     AActor* HitActor = PawnHit.GetActor();
     AEnemyBase* TargetEnemy = Cast<AEnemyBase>(HitActor);
 
-    /*UE_LOG(LogAIInteractionDebug, Log, TEXT("[解析预览交互] Source=%s Target=%s IsSelf=%d"),
-    *GetNameSafe(SourceEnemy), *GetNameSafe(TargetEnemy), (TargetEnemy == SourceEnemy) ? 1 : 0);*/
+    UE_LOG(LogAIInteractionDebug, Log, TEXT("[解析预览交互] Source=%s Target=%s IsSelf=%d"),
+    *GetNameSafe(SourceEnemy), *GetNameSafe(TargetEnemy), (TargetEnemy == SourceEnemy) ? 1 : 0);
 
     if(!TargetEnemy || TargetEnemy ==SourceEnemy)
     {
@@ -1320,8 +1320,8 @@ void AInvisiblePlayerController::ResolvePreviewInteractionUnderCursor()
 
     TArray<FInteractionActionOption> Candidates;
     const bool bBuilt = BuildInteractionCandidates(SourceEnemy, HitActor, Candidates);
-    /*UE_LOG(LogAIInteractionDebug, Log, TEXT("[解析预览交互] 建立预览 bBuilt=%d Num=%d"),
-    bBuilt ? 1 : 0, Candidates.Num());*/
+    UE_LOG(LogAIInteractionDebug, Log, TEXT("[解析预览交互] 建立预览 bBuilt=%d Num=%d"),
+    bBuilt ? 1 : 0, Candidates.Num());
 
     if(bBuilt)
     {
@@ -1329,8 +1329,8 @@ void AInvisiblePlayerController::ResolvePreviewInteractionUnderCursor()
         PreviewInteractionTargetActor = TargetEnemy;
         PreviewCandidateActions = MoveTemp(Candidates);
 
-        /*UE_LOG(LogAIInteractionDebug, Log, TEXT("[解析预览交互] 设置预览交互 Target=%s Num=%d"),
-        *GetNameSafe(PreviewInteractionTargetActor.Get()), PreviewCandidateActions.Num());*/
+        UE_LOG(LogAIInteractionDebug, Log, TEXT("[解析预览交互] 设置预览交互 Target=%s Num=%d"),
+        *GetNameSafe(PreviewInteractionTargetActor.Get()), PreviewCandidateActions.Num());
     }
 }
 
@@ -1340,8 +1340,8 @@ bool AInvisiblePlayerController::BuildInteractionCandidates(AEnemyBase* SourceAI
 {
     OutActions.Reset();
 
-    /*UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] 进入 Source=%s Target=%s TraitActionProfile=%s"),
-    *GetNameSafe(SourceAI), *GetNameSafe(TargetActor), *GetNameSafe(TraitActionProfile));*/
+    UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] 进入 Source=%s Target=%s TraitActionProfile=%s"),
+    *GetNameSafe(SourceAI), *GetNameSafe(TargetActor), *GetNameSafe(TraitActionProfile));
 
     if(!SourceAI || !TargetActor || SourceAI == TargetActor)
     {
@@ -1356,7 +1356,7 @@ bool AInvisiblePlayerController::BuildInteractionCandidates(AEnemyBase* SourceAI
     UTraitSubsystem* TraitSub = GI ? GI->GetSubsystem<UTraitSubsystem>() : nullptr;
     if(!TraitSub) 
     {
-        //UE_LOG(LogAIInteractionDebug, Error, TEXT("[构建预览交互] return: 特质子系统为空"));
+        UE_LOG(LogAIInteractionDebug, Error, TEXT("[构建预览交互] return: 特质子系统为空"));
         return false;
     }
 
@@ -1365,7 +1365,7 @@ bool AInvisiblePlayerController::BuildInteractionCandidates(AEnemyBase* SourceAI
     if(TargetActor->GetClass()->ImplementsInterface(UTraitTargetInterface::StaticClass()))
     {
         TargetTags = ITraitTargetInterface::Execute_GetInteractionTargetTags(TargetActor);
-        //UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] 获取目标标签 TargetTags=%s"), *TargetTags.ToString());
+        UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] 获取目标标签 TargetTags=%s"), *TargetTags.ToString());
     }
 
     // 解析 SourceEnemy 的特质，并将ai与ai的特质写入输出数组
@@ -1382,14 +1382,14 @@ bool AInvisiblePlayerController::BuildInteractionCandidates(AEnemyBase* SourceAI
 
         for(const FTraitInteractionRule& Rule : Def->Rules)
         {
-            /*UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] Rule Type=%d Suggested=%s ActionTag=%s TargetFilter=%s"),
+            UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] Rule Type=%d Suggested=%s ActionTag=%s TargetFilter=%s"),
             (int32)Rule.InteractionType,
             *Rule.SuggestedBehaviorTag.ToString(),
             *Rule.InteractionActionTag.ToString(),
-            *Rule.TargetTagsAny.ToStringSimple());*/
+            *Rule.TargetTagsAny.ToStringSimple());
             if(Rule.InteractionType != ETraitInteractionType::AI_With_AI)
             {
-                //UE_LOG(LogAIInteractionDebug, Warning, TEXT("[构建预览交互] Skip: target filter failed"));
+                UE_LOG(LogAIInteractionDebug, Warning, TEXT("[构建预览交互] Skip: target filter failed"));
                 continue;
             }
 
@@ -1401,17 +1401,17 @@ bool AInvisiblePlayerController::BuildInteractionCandidates(AEnemyBase* SourceAI
 
             const FTraitResolvedAction Resolved = UTraitActionResolver::ResolveAction(Rule, TraitActionProfile);
 
-            /*UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] Resolved Valid=%d Tag=%s Text=%s Cost=%.2f Radius=%.2f Duration=%.2f"),
+            UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] Resolved Valid=%d Tag=%s Text=%s Cost=%.2f Radius=%.2f Duration=%.2f"),
             Resolved.bValid ? 1 : 0,
             *Resolved.ActionTag.ToString(),
             *Resolved.ButtonText.ToString(),
             Resolved.EnergyCost,
             Resolved.ExecutionRadius,
-            Resolved.Duration);*/
+            Resolved.Duration);
 
             if(!Resolved.bValid || !Resolved.ActionTag.IsValid())
             {
-                //UE_LOG(LogAIInteractionDebug, Warning, TEXT("[构建预览交互] Skip: invalid or empty action tag"));
+                UE_LOG(LogAIInteractionDebug, Warning, TEXT("[构建预览交互] Skip: invalid or empty action tag"));
                 continue;
             }
 
@@ -1437,7 +1437,7 @@ bool AInvisiblePlayerController::BuildInteractionCandidates(AEnemyBase* SourceAI
             }
         }
     }
-    //UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] 退出 OutActions=%d"), OutActions.Num());
+    UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] 退出 OutActions=%d"), OutActions.Num());
     return OutActions.Num() > 0;
 }
 
@@ -1491,8 +1491,8 @@ void AInvisiblePlayerController::OnInteractionActionChosen(
     // 未找到路径
     if (PathIndex == INDEX_NONE)
     {
-        /*UE_LOG(LogTemp, Warning, TEXT("未找到对应互动路径: Source=%s Target=%s"),
-            *GetNameSafe(SourceAI), *GetNameSafe(TargetAI));*/
+        UE_LOG(LogTemp, Warning, TEXT("未找到对应互动路径: Source=%s Target=%s"),
+            *GetNameSafe(SourceAI), *GetNameSafe(TargetAI));
         return;
     }
 
@@ -1504,7 +1504,7 @@ void AInvisiblePlayerController::OnInteractionActionChosen(
 
     if (DeltaCost > 0.0f && CurrentPathEnergy + KINDA_SMALL_NUMBER < DeltaCost)
     {
-        //UE_LOG(LogTemp, Warning, TEXT("互动能量不足: Need=%.2f Current=%.2f"), DeltaCost, CurrentPathEnergy);
+        UE_LOG(LogTemp, Warning, TEXT("互动能量不足: Need=%.2f Current=%.2f"), DeltaCost, CurrentPathEnergy);
         return;
     }
 
@@ -1521,11 +1521,11 @@ void AInvisiblePlayerController::OnInteractionActionChosen(
     HideAllInteractionButtons();
 
     // 打印日志
-    /*UE_LOG(LogTemp, Log, TEXT("交互行为选择: Source=%s Target=%s Action=%s Cost=%.2f"),
+    UE_LOG(LogTemp, Log, TEXT("交互行为选择: Source=%s Target=%s Action=%s Cost=%.2f"),
         SourceAI ? *SourceAI->GetName() : TEXT("None"),
         TargetAI ? *TargetAI->GetName() : TEXT("None"),
         *ActionData.ActionTag.ToString(),
-        ActionData.EnergyCost);*/
+        ActionData.EnergyCost);
 }
 
 
