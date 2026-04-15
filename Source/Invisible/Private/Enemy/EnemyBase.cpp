@@ -11,7 +11,7 @@
 #include "Components/CapsuleComponent.h"
 #include "Enemy/UI/AIInteractionButtonsWidget.h"
 
-DEFINE_LOG_CATEGORY(LogAIInteractionDebug);//wjh修改
+DEFINE_LOG_CATEGORY_STATIC(LogAIInteractionDebug, Log, All);
 
 
 // Sets default values
