@@ -276,8 +276,8 @@ void AEnemyBase::HideInteractionButtons()
 void AEnemyBase::HandleInteractionButtonClicked(
     FInteractionActionOption ActionData,
     AEnemyBase* SourceAI,
-    AEnemyBase* TargetAI)
+    AActor* TargetActor)
 {
-    OnInteractionActionChosen.Broadcast(ActionData, SourceAI, TargetAI);
+    OnInteractionActionChosen.Broadcast(ActionData, SourceAI, TargetActor);
 }
 

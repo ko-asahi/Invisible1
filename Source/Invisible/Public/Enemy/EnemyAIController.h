@@ -9,6 +9,7 @@
 #include "Perception/AISenseConfig_Hearing.h"
 #include "Navigation/PathFollowingComponent.h"
 #include "GameplayTagContainer.h"
+#include "Enemy/Interaction/AIInteractionTypes.h"
 #include "EnemyAIController.generated.h"
 
 class APlayerCharacter;
@@ -58,7 +59,7 @@ public:
 
     // 设置待执行互动（在编辑模式结束后，ai行走到目标点执行）
     UFUNCTION(BlueprintCallable, Category = "AI|Interaction")
-    void SetPendingInteraction(AEnemyBase* TargetAI, FGameplayTag BehaviorTag, float Duration, float ExecutionRadius);
+    void SetPendingInteractionContext(const FTraitInteractionContext& InContext);
 
     // 清除待执行互动
     UFUNCTION(BlueprintCallable, Category="AI|Interaction")
@@ -66,11 +67,46 @@ public:
 
     // 待执行互动开始事件（暴露给蓝图，用于在互动开始时执行动画或者对话等）
     UFUNCTION(BlueprintImplementableEvent, Category="AI|Interaction")
-    void BP_OnPendingInteractionStarted(AEnemyBase* TargetAI, FGameplayTag BehaviorTag, float Duration);
+    void BP_OnPendingInteractionStarted(AActor* TargetActor, FGameplayTag BehaviorTag, float Duration);
     
     // 待执行互动完成事件（暴露给蓝图，用于在互动完成时执行动画或者对话等）
     UFUNCTION(BlueprintImplementableEvent, Category="AI|Interaction")
-    void BP_OnPendingInteractionFinished(AEnemyBase* TargetAI, FGameplayTag BehaviorTag);
+    void BP_OnPendingInteractionFinished(AActor* TargetActor, FGameplayTag BehaviorTag);
+
+    // 待执行互动中断事件（暴露给蓝图，用于在互动中断时执行动画或者对话等）
+    UFUNCTION(BlueprintImplementableEvent, Category="AI|Interaction")
+    void BP_OnPendingInteractionInterrupted(AActor* TargetActor, FGameplayTag BehaviorTag);
+
+    // 达到打探阈值时是否打断当前互动行为
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction")
+    bool bInterruptInteractionOnChase = true;
+
+    // 中断当前待执行互动
+    void InterruptPendingInteractionForAlert();
+
+public:
+
+    // ===== 交谈行为 =====
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction")
+    bool bChattyLockTargetState = true;
+
+private:
+    // ===== 交谈行为 =====
+    // 当前交谈目标的AI控制器
+    TWeakObjectPtr<AEnemyAIController> ActiveInteractionTargetController;
+
+    // 是否为交谈行为
+    bool IsChatLikeInteraction(const FGameplayTag& ActionTag) const;
+
+    // 应用互动朝向
+    void ApplyInteractionFacing(AEnemyBase* SelfEnemy, AActor* TargetActor) const;
+
+    // 处理应用状态互动锁
+    void ApplyInteractionStateLock(AEnemyBase* SelfEnemy, AActor* TargetActor, const FGameplayTag& ActionTag, bool bIsChatLike);
+
+
+    // 上下文检验（用于校验当前代码是否存在问题）
+    bool ValidatePendingInteractionContext(const TCHAR* Phase) const;
 
 private:
     // =====视觉警戒值检测相关=====
@@ -163,7 +199,7 @@ private:
     // =====编辑模式互动执行（ai行为执行）=====
 
     // 待执行互动目标
-    TWeakObjectPtr<AEnemyBase> PendingInteractionTarget;
+    TWeakObjectPtr<AActor> PendingInteractionTarget;
 
     // 待执行互动行为标签
     FGameplayTag PendingInteractionBehaviorTag;
@@ -183,6 +219,12 @@ private:
     // 待执行互动计时器
     FTimerHandle PendingInteractionTimerHandle;
 
+    // 待执行互动上下文
+    FTraitInteractionContext PendingInteractionContext;
+
+    // 待执行互动完成回调
+    FDelegateHandle PendingInteractionApproachFinishedHandle;
+
     // 检查待执行互动是否有效
     bool HasValidPendingInteraction() const;
 
@@ -191,6 +233,24 @@ private:
 
     // 完成执行待执行互动
     void FinishPendingInteraction();
+
+    // 开始接近目标
+    void StartPendingInteractionApproach();
+
+    // 接近目标完成回调
+    void HandlePendingInteractionApproachFinished(FAIRequestID RequestID, const FPathFollowingResult& Result);
+
+    // 开始执行
+    void BeginPendingInteractionLoop();
+
+    // 强制状态 Tag （用于在互动期间防止被常规状态机覆盖）
+    void SetForcedInteractionStateTag(bool bEnable, FGameplayTag InTag);
+
+    // 是否启用强制状态 Tag
+    bool bUseForcedInteractionStateTag = false;
+
+    // 强制状态 Tag
+    FGameplayTag ForcedInteractionStateTag;
 
 private:
 	class UBehaviorTreeComponent* BehaviorTreeComp;	// 行为树组件

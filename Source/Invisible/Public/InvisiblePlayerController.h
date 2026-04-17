@@ -408,7 +408,7 @@ protected:
 	void OnInteractionActionChosen(
 		FInteractionActionOption ActionData,
 		AEnemyBase* SourceAI,
-		AEnemyBase* TargetAI);
+		AActor* TargetActor);
 
 	// 注册ai交互委托
 	void RegisterEnemyInteractionDelegates();
@@ -420,7 +420,7 @@ protected:
 	void HideAllInteractionButtons();
 
 	// 查找从 SourceAI 到 TargetAI 的互动路径
-	int32 FindLockedInteractionPathIndex(const AEnemyBase* SourceAI, const AEnemyBase* TargetAI) const; 
+	int32 FindLockedInteractionPathIndex(const AEnemyBase* SourceAI, const AActor* TargetActor) const; 
 
 private:
 	// 生成相机实例(运行时)

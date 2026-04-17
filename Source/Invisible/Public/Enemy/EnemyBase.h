@@ -312,5 +312,5 @@ protected:
     void HandleInteractionButtonClicked(
         FInteractionActionOption ActionData,
         AEnemyBase* SourceAI,
-        AEnemyBase* TargetAI);
+        AActor* TargetActor);
 };

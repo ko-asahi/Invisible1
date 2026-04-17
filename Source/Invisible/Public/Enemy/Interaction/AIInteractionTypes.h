@@ -127,5 +127,5 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
     FOnAIInteractionActionClicked,
     FInteractionActionOption, ActionData,
     AEnemyBase*, SourceAI,
-    AEnemyBase*, TargetAI
+    AActor*, TargetAI
 );
