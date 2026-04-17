@@ -11,7 +11,7 @@
 #include "Components/CapsuleComponent.h"
 #include "Enemy/UI/AIInteractionButtonsWidget.h"
 
-DEFINE_LOG_CATEGORY_STATIC(LogAIInteractionDebug, Log, All);
+DEFINE_LOG_CATEGORY_STATIC(LogAIEnemyInteractionDebug, Log, All);
 
 
 // Sets default values
@@ -251,7 +251,7 @@ void AEnemyBase::ShowInteractionButtons(const TArray<FInteractionActionOption>& 
     InteractionButtonsWidgetComp->SetVisibility(InActions.Num() > 0,true);
 
     UE_LOG(LogTemp, Log, TEXT("显示头顶交互按钮: %s"), *InSourceAI->GetName());
-    UE_LOG(LogAIInteractionDebug, Log, TEXT("[显示头顶交互按钮] Enter Self=%s Source=%s InActions=%d Comp=%s WidgetClass=%s"),
+    UE_LOG(LogAIEnemyInteractionDebug, Log, TEXT("[显示头顶交互按钮] Enter Self=%s Source=%s InActions=%d Comp=%s WidgetClass=%s"),
     *GetNameSafe(this),
     *GetNameSafe(InSourceAI),
     InActions.Num(),
@@ -276,8 +276,8 @@ void AEnemyBase::HideInteractionButtons()
 void AEnemyBase::HandleInteractionButtonClicked(
     FInteractionActionOption ActionData,
     AEnemyBase* SourceAI,
-    AEnemyBase* TargetAI)
+    AActor* TargetActor)
 {
-    OnInteractionActionChosen.Broadcast(ActionData, SourceAI, TargetAI);
+    OnInteractionActionChosen.Broadcast(ActionData, SourceAI, TargetActor);
 }
 

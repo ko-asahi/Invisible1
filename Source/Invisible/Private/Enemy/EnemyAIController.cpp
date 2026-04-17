@@ -39,6 +39,10 @@ const FName AEnemyAIController::BB_IsFiring = TEXT("IsFiring");
 
 AEnemyAIController::AEnemyAIController()
 {
+    // 启用 Tick
+    PrimaryActorTick.bCanEverTick = true;
+    PrimaryActorTick.bStartWithTickEnabled = true;
+
     // 创建感知组件
     PerceptionComp = CreateDefaultSubobject<UAIPerceptionComponent>(TEXT("PerceptionComp"));
     SetPerceptionComponent(*PerceptionComp);
@@ -61,6 +65,25 @@ AEnemyAIController::AEnemyAIController()
     PerceptionComp->OnTargetPerceptionUpdated.AddDynamic(this, &AEnemyAIController::OnTargetPerceptionUpdated);
 }
 
+void AEnemyAIController::Tick(float DeltaSeconds)
+{
+    Super::Tick(DeltaSeconds);
+
+    if(!bIsRunningPendingInteraction)
+    {
+        return;
+    }
+
+    AEnemyBase* SelfEnemy = Cast<AEnemyBase>(GetPawn());
+    AActor* TargetActor = PendingInteractionContext.TargetActor.Get();
+
+    if(!SelfEnemy || !TargetActor)
+    {
+        return;
+    }
+
+    ApplyInteractionFacing(SelfEnemy, TargetActor, DeltaSeconds);
+}
 
 void AEnemyAIController::OnPossess(APawn* InPawn)
 {
@@ -68,6 +91,9 @@ void AEnemyAIController::OnPossess(APawn* InPawn)
 
     AEnemyBase* Enemy = Cast<AEnemyBase>(InPawn);
     if(!Enemy) return;
+
+    // 获取互动时转向速度
+    InteractionTurnSpeed = FMath::Max(Enemy->InteractionTurnSpeed, 0.0f);
 
     // 从敌人类获取感知参数
     SightRadius = Enemy->SightRadius;
@@ -160,6 +186,7 @@ void AEnemyAIController::OnUnPossess()
 
     GetWorldTimerManager().ClearTimer(DetectionTimerHandle);
     GetWorldTimerManager().ClearTimer(PendingInteractionTimerHandle);
+    GetWorldTimerManager().ClearTimer(InteractionFacingTimerHandle);
     Super::OnUnPossess();
 }
 
@@ -313,6 +340,12 @@ void AEnemyAIController::TickDetection()
 
     Alertness = FMath::Clamp(Alertness, 0.f, MaxAlertness);
     const bool bChasing = (Alertness >= ChaseThreshold);
+
+    if (bInterruptInteractionOnChase && bIsRunningPendingInteraction && bChasing)
+    {
+        UE_LOG(LogTemp, Log, TEXT("[AI] 达到打探阈值，中断当前互动并切回打探行为"));
+        InterruptPendingInteractionForAlert();
+    }
 
     // ===== 黑板基础值 =====
     BB->SetValueAsFloat(BB_Alertness, Alertness);
@@ -705,13 +738,21 @@ void AEnemyAIController::ClearInvestigateRuntimeState(bool bClearHeardMemory)
 
 // ===== 编辑模式互动执行（ai行为执行） =====
 // 设置待执行互动
-void AEnemyAIController::SetPendingInteraction(AEnemyBase* TargetAI, FGameplayTag BehaviorTag, float Duration, float ExecutionRadius)
+void AEnemyAIController::SetPendingInteractionContext(const FTraitInteractionContext& InContext)
 {
-    PendingInteractionTarget = TargetAI;
-    PendingInteractionBehaviorTag = BehaviorTag;
-    PendingInteractionDuration = FMath::Max(0.0f, Duration);
-    PendingInteractionExecutionRadius = FMath::Max(0.0f, ExecutionRadius);
-    bHasPendingInteraction = TargetAI != nullptr;
+    // PendingInteractionTarget = TargetActor;
+    // PendingInteractionBehaviorTag = BehaviorTag;
+    // PendingInteractionDuration = FMath::Max(0.0f, Duration);
+    // PendingInteractionExecutionRadius = FMath::Max(0.0f, ExecutionRadius);
+    // bHasPendingInteraction = TargetActor != nullptr;
+    PendingInteractionContext = InContext;
+    bHasPendingInteraction = PendingInteractionContext.IsValid();
+
+    // 兼容旧逻辑
+    PendingInteractionTarget = PendingInteractionContext.TargetActor.Get();
+    PendingInteractionBehaviorTag = PendingInteractionContext.Spec.ActionTag;
+    PendingInteractionDuration = FMath::Max(0.0f, PendingInteractionContext.Spec.Duration);
+    PendingInteractionExecutionRadius = FMath::Max(0.0f, PendingInteractionContext.Spec.ExecutionRadius);
 }
 
 // 清除待执行互动
@@ -724,21 +765,76 @@ void AEnemyAIController::ClearPendingInteraction()
     PendingInteractionBehaviorTag = FGameplayTag();
     PendingInteractionDuration = 0.0f;
     PendingInteractionExecutionRadius = 0.0f;
+    PendingInteractionContext = FTraitInteractionContext(); // 清空上下文
 
     GetWorldTimerManager().ClearTimer(PendingInteractionTimerHandle);
+    GetWorldTimerManager().ClearTimer(InteractionFacingTimerHandle);
+
+    // 清理待执行互动完成回调
+    if(UPathFollowingComponent* PathComp = GetPathFollowingComponent())
+    {
+        if(PendingInteractionApproachFinishedHandle.IsValid())
+        {
+            PathComp->OnRequestFinished.Remove(PendingInteractionApproachFinishedHandle);
+            PendingInteractionApproachFinishedHandle.Reset();
+        }
+    }
+
+    SetForcedInteractionStateTag(false, FGameplayTag());
 }
 
 // 检查路径是否有效
 bool AEnemyAIController::HasValidPendingInteraction() const
 {
-    return bHasPendingInteraction && PendingInteractionTarget.IsValid();
+    return bHasPendingInteraction && PendingInteractionContext.IsValid();
 }
 
-// 开始执行待执行互动
+// 接近目标（原逻辑：开始执行待执行互动，已废弃）
 void AEnemyAIController::StartPendingInteraction()
 {
-    // 路径无效时，清理待执行互动
-    if (!HasValidPendingInteraction())
+    // // 路径无效时，清理待执行互动
+    // if (!HasValidPendingInteraction())
+    // {
+    //     ClearPendingInteraction();
+    //     if (UBrainComponent* Brain = GetBrainComponent())
+    //     {
+    //         Brain->RestartLogic();
+    //     }
+    //     return;
+    // }
+
+    // bIsRunningPendingInteraction = true;
+
+    // // 互动期间停止移动，停止检测，避免状态机覆盖
+    // StopMovement();
+    // GetWorldTimerManager().ClearTimer(DetectionTimerHandle);
+
+    // if (UBrainComponent* Brain = GetBrainComponent())
+    // {
+    //     Brain->StopLogic(TEXT("执行编辑模式互动行为"));
+    // }
+
+    // if (AEnemyBase* SelfEnemy = Cast<AEnemyBase>(GetPawn()))
+    // {
+    //     // 直接用行为Tag作为状态Tag，方便在蓝图里根据Tag切动画
+    //     if (PendingInteractionBehaviorTag.IsValid())
+    //     {
+    //         SelfEnemy->SetAIStateTag(PendingInteractionBehaviorTag);
+    //     }
+    // }
+
+    // BP_OnPendingInteractionStarted(PendingInteractionTarget.Get(), PendingInteractionBehaviorTag, PendingInteractionDuration);
+    // // 设置计时器，确保互动时长不会因为AI状态机暂停而中断
+    // const float SafeDuration = FMath::Max(PendingInteractionDuration, 0.1f);
+    // GetWorldTimerManager().SetTimer(
+    //     PendingInteractionTimerHandle,
+    //     this,
+    //     &AEnemyAIController::FinishPendingInteraction,
+    //     SafeDuration,
+    //     false
+    // );
+
+    if (!HasValidPendingInteraction() || !ValidatePendingInteractionContext(TEXT("StartPendingInteraction")))
     {
         ClearPendingInteraction();
         if (UBrainComponent* Brain = GetBrainComponent())
@@ -750,27 +846,145 @@ void AEnemyAIController::StartPendingInteraction()
 
     bIsRunningPendingInteraction = true;
 
-    // 互动期间停止移动，停止检测，避免状态机覆盖
-    StopMovement();
-    GetWorldTimerManager().ClearTimer(DetectionTimerHandle);
-
+    // 停BT防并发MoveTo
     if (UBrainComponent* Brain = GetBrainComponent())
     {
-        Brain->StopLogic(TEXT("执行编辑模式互动行为"));
+        Brain->StopLogic(TEXT("执行互动-接近目标阶段"));
     }
 
-    if (AEnemyBase* SelfEnemy = Cast<AEnemyBase>(GetPawn()))
+    StartPendingInteractionApproach();
+}
+
+// 开始接近目标
+void AEnemyAIController::StartPendingInteractionApproach()
+{
+    AActor* TargetActor = PendingInteractionContext.TargetActor.Get();
+    if(!TargetActor)
     {
-        // 直接用行为Tag作为状态Tag，方便在蓝图里根据Tag切动画
-        if (PendingInteractionBehaviorTag.IsValid())
+        FinishPendingInteraction();
+        return;
+    }
+
+    UPathFollowingComponent* PathComp = GetPathFollowingComponent();
+    if(!PathComp)
+    {
+        FinishPendingInteraction();
+        return;
+    }
+
+    if(PendingInteractionApproachFinishedHandle.IsValid())
+    {
+        PathComp->OnRequestFinished.Remove(PendingInteractionApproachFinishedHandle);
+        PendingInteractionApproachFinishedHandle.Reset();
+    }
+
+    PendingInteractionApproachFinishedHandle = PathComp->OnRequestFinished.AddUObject(
+        this, &AEnemyAIController::HandlePendingInteractionApproachFinished);
+
+    const float AcceptRadius = FMath::Max(10.0f, PendingInteractionContext.Spec.ExecutionRadius);
+    const EPathFollowingRequestResult::Type Req = MoveToActor(
+        TargetActor,
+        AcceptRadius,
+        true,
+        true,
+        true,
+        nullptr,
+        true
+    );
+
+    if(Req == EPathFollowingRequestResult::Failed)
+    {
+        FinishPendingInteraction();
+    }
+}
+
+// 接近目标完成回调
+void AEnemyAIController::HandlePendingInteractionApproachFinished(FAIRequestID RequestID, const FPathFollowingResult& Result)
+{
+    if (UPathFollowingComponent* PathComp = GetPathFollowingComponent())
+    {
+        if (PendingInteractionApproachFinishedHandle.IsValid())
         {
-            SelfEnemy->SetAIStateTag(PendingInteractionBehaviorTag);
+            PathComp->OnRequestFinished.Remove(PendingInteractionApproachFinishedHandle);
+            PendingInteractionApproachFinishedHandle.Reset();
         }
     }
 
-    BP_OnPendingInteractionStarted(PendingInteractionTarget.Get(), PendingInteractionBehaviorTag, PendingInteractionDuration);
-    // 设置计时器，确保互动时长不会因为AI状态机暂停而中断
-    const float SafeDuration = FMath::Max(PendingInteractionDuration, 0.1f);
+    if (Result.Code != EPathFollowingResult::Success)
+    {
+        FinishPendingInteraction();
+        return;
+    }
+
+    BeginPendingInteractionLoop();
+
+}
+
+// 开始执行待执行互动循环
+void AEnemyAIController::BeginPendingInteractionLoop()
+{
+    AActor* TargetActor = PendingInteractionContext.TargetActor.Get();
+    AEnemyBase* SelfEnemy = Cast<AEnemyBase>(GetPawn());
+
+    if(!TargetActor || !SelfEnemy)
+    {
+        FinishPendingInteraction();
+        return;
+    }
+
+    // 获取互动行为Tag
+    const FGameplayTag ActionTag = PendingInteractionContext.Spec.ActionTag;
+    if(!ActionTag.IsValid())
+    {
+        FinishPendingInteraction();
+        return;
+    }
+    const bool bIsChatLike = IsChatLikeInteraction(ActionTag);
+
+    // 互动期间停止移动，但不关闭检测
+    StopMovement();
+
+    ApplyInteractionFacing(SelfEnemy, TargetActor, GetWorld()->GetDeltaSeconds());
+    ApplyInteractionStateLock(SelfEnemy, TargetActor, ActionTag, bIsChatLike);
+
+    // // 源ai 切为互动Tag
+    // if(PendingInteractionContext.Spec.ActionTag.IsValid())
+    // {
+    //     SelfEnemy->SetAIStateTag(PendingInteractionContext.Spec.ActionTag);
+    // }
+
+    // // 如果目标也是敌人，可同步目标Tag并让其朝向自己
+    // if (AEnemyBase* TargetEnemy = Cast<AEnemyBase>(TargetActor))
+    // {
+    //     // 同步目标Tag
+    //     if (PendingInteractionContext.Spec.ActionTag.IsValid())
+    //     {
+    //         TargetEnemy->SetAIStateTag(PendingInteractionContext.Spec.ActionTag);
+    //     }
+
+    //     // 朝向自己
+    //     const FVector ToSource = (SelfEnemy->GetActorLocation() - TargetEnemy->GetActorLocation()).GetSafeNormal2D();
+    //     if (!ToSource.IsNearlyZero())
+    //     {
+    //         TargetEnemy->SetActorRotation(ToSource.Rotation());
+    //     }
+    // }
+
+    GetWorldTimerManager().ClearTimer(InteractionFacingTimerHandle);
+
+    // const float FacingTickInterval = 0.016f; 
+    // GetWorldTimerManager().SetTimer(
+    //     InteractionFacingTimerHandle,
+    //     this,
+    //     &AEnemyAIController::TickInteractionFacing,
+    //     FacingTickInterval,   // 约60Hz，想省性能可用0.033f
+    //     true
+    // );
+
+    BP_OnPendingInteractionStarted(TargetActor, PendingInteractionContext.Spec.ActionTag, PendingInteractionContext.Spec.Duration);
+
+    // 开始事件计时
+    const float SafeDuration = FMath::Max(PendingInteractionContext.Spec.Duration, 0.1f);
     GetWorldTimerManager().SetTimer(
         PendingInteractionTimerHandle,
         this,
@@ -780,18 +994,32 @@ void AEnemyAIController::StartPendingInteraction()
     );
 }
 
+
 // 完成执行待执行互动
 void AEnemyAIController::FinishPendingInteraction()
 {
-    AEnemyBase* TargetEnemy = PendingInteractionTarget.Get();
+    AActor* TargetActor = PendingInteractionTarget.Get();
     const FGameplayTag BehaviorTag = PendingInteractionBehaviorTag;
 
-    BP_OnPendingInteractionFinished(TargetEnemy, BehaviorTag);
+    BP_OnPendingInteractionFinished(TargetActor, BehaviorTag);
 
+    // 先释放目标AI锁
+    if(ActiveInteractionTargetController.IsValid())
+    {
+        ActiveInteractionTargetController->SetForcedInteractionStateTag(false, FGameplayTag());
+        ActiveInteractionTargetController.Reset();
+    }
+
+    // 释放自身（源AI）锁，清理上下文
+    SetForcedInteractionStateTag(false, FGameplayTag());
     ClearPendingInteraction();
+    GetWorldTimerManager().ClearTimer(InteractionFacingTimerHandle);
 
     // 完成互动，恢复常规巡逻ai
-    StartDetectionTimer();
+    if (!GetWorldTimerManager().IsTimerActive(DetectionTimerHandle))
+    {
+        StartDetectionTimer();
+    }
     if(UBrainComponent* Brain = GetBrainComponent())
     {
         Brain->RestartLogic();
@@ -799,6 +1027,210 @@ void AEnemyAIController::FinishPendingInteraction()
     UE_LOG(LogTemp, Log, TEXT("编辑模式互动完成，恢复常规巡逻ai"));
 }
 
+// 中断当前待执行互动
+void AEnemyAIController::InterruptPendingInteractionForAlert()
+{
+    if (!bIsRunningPendingInteraction)
+    {
+        return;
+    }
+
+    AActor* TargetActor = PendingInteractionTarget.Get();
+    const FGameplayTag BehaviorTag = PendingInteractionBehaviorTag;
+
+    // 清除互动计时器，避免后续又触发“正常结束”
+    GetWorldTimerManager().ClearTimer(PendingInteractionTimerHandle);
+    GetWorldTimerManager().ClearTimer(InteractionFacingTimerHandle);
+
+    // 通知蓝图“被中断”
+    BP_OnPendingInteractionInterrupted(TargetActor, BehaviorTag);
+
+    // 中断时也进行释放
+    if (ActiveInteractionTargetController.IsValid())
+    {
+        ActiveInteractionTargetController->SetForcedInteractionStateTag(false, FGameplayTag());
+        ActiveInteractionTargetController.Reset();
+    }
+
+    // 释放自身（源AI）锁，清理上下文
+    SetForcedInteractionStateTag(false, FGameplayTag());
+    // 清理互动运行态（会把 bIsRunningPendingInteraction 置 false）
+    ClearPendingInteraction();
+
+    // 保证感知检测在运行
+    if (!GetWorldTimerManager().IsTimerActive(DetectionTimerHandle))
+    {
+        StartDetectionTimer();
+    }
+
+    // 重启BT，让AI立即进入打探分支
+    if (UBrainComponent* Brain = GetBrainComponent())
+    {
+        Brain->RestartLogic();
+    }
+}
+
+
+// 强制状态 Tag （用于在互动期间防止被常规状态机覆盖）
+void AEnemyAIController::SetForcedInteractionStateTag(bool bEnable, FGameplayTag InTag)
+{
+    bUseForcedInteractionStateTag = bEnable && InTag.IsValid();
+    ForcedInteractionStateTag = bUseForcedInteractionStateTag ? InTag : FGameplayTag();
+
+    if(AEnemyBase* Enemy = Cast<AEnemyBase>(GetPawn()))
+    {
+        if(bUseForcedInteractionStateTag)
+        {
+            Enemy->SetAIStateTag(ForcedInteractionStateTag);
+        }
+    }
+}
+
+// ai转向函数
+void AEnemyAIController::RotateActorToward(AActor* ActorToRotate, const FVector& TargetLocation, float DeltaSeconds) const
+{
+    if(!ActorToRotate) return;
+
+    const FVector ToTarget = (TargetLocation - ActorToRotate->GetActorLocation()).GetSafeNormal2D();
+    if(ToTarget.IsNearlyZero()) return;
+
+    const FRotator CurrentRot = ActorToRotate->GetActorRotation();
+    const FRotator TargetRot = ToTarget.Rotation();
+    const FRotator NewRot = FMath::RInterpConstantTo(
+        CurrentRot,
+        TargetRot,
+        DeltaSeconds,
+        InteractionTurnSpeed   // 度/秒
+    );
+
+    ActorToRotate->SetActorRotation(NewRot);
+}
+
+// 互动时转向计时器回调
+void AEnemyAIController::TickInteractionFacing()
+{
+    if(!bIsRunningPendingInteraction)
+    {
+        GetWorldTimerManager().ClearTimer(InteractionFacingTimerHandle);
+        return;
+    }
+
+    AEnemyBase* SelfEnemy = Cast<AEnemyBase>(GetPawn());
+    AActor* TargetActor = PendingInteractionContext.TargetActor.Get();
+
+    if(!SelfEnemy || !TargetActor)
+    {
+        GetWorldTimerManager().ClearTimer(InteractionFacingTimerHandle);
+        return;
+    }
+
+    ApplyInteractionFacing(SelfEnemy, TargetActor, GetWorld()->GetDeltaSeconds());
+    
+}
+
+// ===== 交谈行为 =====
+// 是否为交谈行为
+bool AEnemyAIController::IsChatLikeInteraction(const FGameplayTag& ActionTag) const
+{
+    if(!ActionTag.IsValid())
+    {
+        return false;
+    }
+
+    static const FGameplayTag ChatBehaviorRootTag = FGameplayTag::RequestGameplayTag(FName("Behavior.AI.Social.Chat"), false);
+
+    if(!ChatBehaviorRootTag.IsValid())
+    {
+        return false;
+    }
+    return ActionTag.MatchesTag(ChatBehaviorRootTag);
+}
+
+// 应用互动朝向
+void AEnemyAIController::ApplyInteractionFacing(AEnemyBase* SelfEnemy, AActor* TargetActor, float DeltaSeconds) const
+{
+    if(!SelfEnemy || !TargetActor)
+    {
+        return;
+    }
+
+    const float Dt = FMath::Max(DeltaSeconds, KINDA_SMALL_NUMBER);
+
+    const FVector ToTarget = (TargetActor->GetActorLocation() - SelfEnemy->GetActorLocation()).GetSafeNormal2D();
+    if(!ToTarget.IsNearlyZero())
+    {
+        RotateActorToward(SelfEnemy, TargetActor->GetActorLocation(), Dt);
+    }
+
+    if(AEnemyBase* TargetEnemy = Cast<AEnemyBase>(TargetActor))
+    {
+        const FVector ToSource = (SelfEnemy->GetActorLocation() - TargetEnemy->GetActorLocation()).GetSafeNormal2D();
+
+        if(!ToSource.IsNearlyZero())
+        {
+            RotateActorToward(TargetEnemy, SelfEnemy->GetActorLocation(), Dt);
+        }
+    }
+    
+}
+
+// 处理应用状态互动锁
+void AEnemyAIController::ApplyInteractionStateLock(AEnemyBase* SelfEnemy, AActor* TargetActor, const FGameplayTag& ActionTag, bool bIsChatLike)
+{
+    if(!SelfEnemy || !TargetActor || !ActionTag.IsValid())
+    {
+        return;
+    }
+
+    // 源AI进入互动Tag锁
+    SetForcedInteractionStateTag(true, ActionTag);
+
+    // 聊天类互动才同步锁目标
+    if (!bIsChatLike || !bChattyLockTargetState)
+    {
+        return;
+    }
+
+    if (AEnemyBase* TargetEnemy = Cast<AEnemyBase>(TargetActor))
+    {
+        if (AEnemyAIController* TargetCtrl = Cast<AEnemyAIController>(TargetEnemy->GetController()))
+        {
+            ActiveInteractionTargetController = TargetCtrl;
+            TargetCtrl->SetForcedInteractionStateTag(true, ActionTag);
+        }
+    }
+    
+}
+
+// 上下文检验（用于校验当前代码是否存在问题）
+bool AEnemyAIController::ValidatePendingInteractionContext(const TCHAR* Phase) const
+{
+    if(!PendingInteractionContext.IsValid())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[Interaction][%s] 上下文无效"), Phase);
+        return false;
+    }
+
+    if(!IsValid(PendingInteractionContext.TargetActor.Get()))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[Interaction][%s] 目标不存在"), Phase);
+        return false;
+    }
+
+    if(!IsValid(PendingInteractionContext.SourceActor.Get()))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[Interaction][%s] 源ai不存在"), Phase);
+        return false;
+    }
+
+    if(!PendingInteractionContext.Spec.ActionTag.IsValid())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[Interaction][%s] 行为Tag不存在"), Phase);
+        return false;
+    }
+
+    return true;
+}
 
 // ===== 状态机 =====
 // 初始化状态标签
@@ -814,9 +1246,19 @@ void AEnemyAIController::InitAIStateTags()
 // 更新状态标签
 void AEnemyAIController::UpdateAIStateTags()
 {
+    
+
+
     UBlackboardComponent* BB = GetBlackboardComponent();
     AEnemyBase* Enemy = Cast<AEnemyBase>(GetPawn());
     if (!BB || !Enemy) return;
+
+    // 如果启用强制状态 Tag 锁，则直接返回
+    if (bUseForcedInteractionStateTag && ForcedInteractionStateTag.IsValid())
+    {
+        Enemy->SetAIStateTag(ForcedInteractionStateTag);
+        return;
+    }
 
     const bool bIsFiring       = BB->GetValueAsBool(BB_IsFiring);
     const bool bHasInterest    = BB->GetValueAsBool(BB_HasInterest);

@@ -25,7 +25,7 @@ public:
 	
 	// 设置按钮数据
 	UFUNCTION(BlueprintCallable, Category = "AI|Interaction")
-	void SetupAction(const TArray<FInteractionActionOption>& InAction, AEnemyBase* InSourceAI, AEnemyBase* InTargetAI);
+	void SetupAction(const TArray<FInteractionActionOption>& InAction, AEnemyBase* InSourceAI, AActor* InTargetAI);
 
 	// 按钮点击事件
 	UFUNCTION(BlueprintCallable, Category = "AI|Interaction")
@@ -54,5 +54,5 @@ protected:
 
 	// 缓存目标ai
 	UPROPERTY(BlueprintReadOnly, Category="AI|Interaction")
-	TWeakObjectPtr<AEnemyBase> CachedTargetAI;
+	TWeakObjectPtr<AActor> CachedTargetActor;
 };

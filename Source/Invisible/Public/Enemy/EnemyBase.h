@@ -307,6 +307,12 @@ public:
     UFUNCTION(BlueprintCallable, Category="AI|Interaction")
     void HideInteractionButtons();
 
+    // ===== ai交互行为相关 =====
+
+    // 互动时转向速度
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction", meta = (ClampMin = "0.0"))
+    float InteractionTurnSpeed = 180.0f;
+
 
 protected:
     // 按键点击句柄
@@ -314,5 +320,5 @@ protected:
     void HandleInteractionButtonClicked(
         FInteractionActionOption ActionData,
         AEnemyBase* SourceAI,
-        AEnemyBase* TargetAI);
+        AActor* TargetActor);
 };

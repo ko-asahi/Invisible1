@@ -15,8 +15,9 @@
 #include "Enemy/Trait/TraitActionResolver.h"
 #include "Enemy/Trait/TraitActionProfile.h"
 #include "Enemy/Interface/TraitTargetInterface.h"
+#include "Interaction/InteractionTargetComponent.h"
 
-
+DEFINE_LOG_CATEGORY_STATIC(LogAIInteractionDebug, Log, All);
 
 
 void AInvisiblePlayerController::BeginPlay()
@@ -298,16 +299,41 @@ void AInvisiblePlayerController::SwitchMode()
 
                         EnemyAI->SetInjectedPath(LockedPath.Points);
 
-                        // 注入“已确认互动”
-                        if (LockedPath.bIsInteractionPath && LockedPath.bActionConfirmed)
+                        // 在写入互动前检验相关行为数据
+                        const bool bActionDataValid = 
+                            LockedPath.TargetActor.IsValid() &&
+                            LockedPath.ConfirmedActionTag.IsValid() &&
+                            LockedPath.ConfirmedDuration >= 0.0f &&
+                            LockedPath.ConfirmedExecutionRadius >= 0.0f;
+
+                        if(!bActionDataValid)
                         {
-                            AEnemyBase* TargetEnemy = Cast<AEnemyBase>(LockedPath.TargetActor.Get());
-                            EnemyAI->SetPendingInteraction(
-                                TargetEnemy,
-                                LockedPath.ConfirmedActionTag,
-                                LockedPath.ConfirmedDuration,
-                                LockedPath.ConfirmedExecutionRadius
-                            );
+                            UE_LOG(LogTemp, Warning, TEXT("[Interaction] 跳过行为写入 Pawn = %s"),*GetNameSafe(EnemyPawn));
+                            EnemyAI->ClearPendingInteraction();
+                        }
+
+                        // 注入“已确认互动”
+                        else if (LockedPath.bIsInteractionPath && LockedPath.bActionConfirmed)
+                        {
+                            AActor* TargetActor = LockedPath.TargetActor.Get();
+                            // EnemyAI->SetPendingInteraction(
+                            //     TargetActor,
+                            //     LockedPath.ConfirmedActionTag,
+                            //     LockedPath.ConfirmedDuration,
+                            //     LockedPath.ConfirmedExecutionRadius
+                            // );
+                            // 新：通过 FTraitInteractionContext 实现
+                            FTraitInteractionContext Ctx;
+                            Ctx.SourceActor = EnemyPawn;
+                            Ctx.TargetActor = LockedPath.TargetActor.Get();
+                            Ctx.InteractionType = Cast<AEnemyBase>(Ctx.TargetActor.Get())
+                                ? ETraitInteractionType::AI_With_AI
+                                : ETraitInteractionType::AI_With_Object;
+                            Ctx.Spec.ActionTag = LockedPath.ConfirmedActionTag;
+                            Ctx.Spec.Duration = LockedPath.ConfirmedDuration;
+                            Ctx.Spec.ExecutionRadius = LockedPath.ConfirmedExecutionRadius;
+                            Ctx.Spec.EnergyCost = LockedPath.ConfirmedActionCost;
+                            EnemyAI->SetPendingInteractionContext(Ctx);
                         }
                         else
                         {
@@ -909,11 +935,11 @@ void AInvisiblePlayerController::OnEditPathDragCompleted()
 
     const bool bInteractionValid = bHasPreviewInteraction && PreviewInteractionTargetActor.IsValid() && PreviewCandidateActions.Num() > 0;
     
-    UE_LOG(LogAIInteractionDebug, Log, TEXT("[绘制完成] 绘制交互路径 bHasPreviewInteraction=%d TargetValid=%d CandidateNum=%d => bInteractionValid=%d"),
-    bHasPreviewInteraction ? 1 : 0,
-    PreviewInteractionTargetActor.IsValid() ? 1 : 0,
-    PreviewCandidateActions.Num(),
-    bInteractionValid ? 1 : 0);
+    // UE_LOG(LogAIInteractionDebug, Log, TEXT("[绘制完成] 绘制交互路径 bHasPreviewInteraction=%d TargetValid=%d CandidateNum=%d => bInteractionValid=%d"),
+    // bHasPreviewInteraction ? 1 : 0,
+    // PreviewInteractionTargetActor.IsValid() ? 1 : 0,
+    // PreviewCandidateActions.Num(),
+    // bInteractionValid ? 1 : 0);
 
     if(Index == INDEX_NONE)
     {
@@ -938,17 +964,32 @@ void AInvisiblePlayerController::OnEditPathDragCompleted()
         LockedAIPaths.Add(MoveTemp(NewPath));
 
         AEnemyBase* SourceEnemy = Cast<AEnemyBase>(DragPawn.Get());
-        AEnemyBase* TargetEnemy = Cast<AEnemyBase>(PreviewInteractionTargetActor.Get());
+        AActor* TargetActor = PreviewInteractionTargetActor.Get();
 
-        // 隐藏所有ai头顶交互按钮
+        // 隐藏所有头顶交互按钮
         HideAllInteractionButtons();
-        // 显示目标ai头顶交互按钮
-        if (bInteractionValid && SourceEnemy && TargetEnemy)
+        // 显示目标头顶交互按钮
+        if (bInteractionValid && SourceEnemy && TargetActor)
         {
             const TArray<FInteractionActionOption>& Actions = (Index == INDEX_NONE) ? LockedAIPaths.Last().CandidateActions : LockedAIPaths[Index].CandidateActions;
-             UE_LOG(LogAIInteractionDebug, Log, TEXT("[绘制完成] 尝试显示按钮 Source=%s Target=%s ActionsNum=%d"),
-            *GetNameSafe(SourceEnemy), *GetNameSafe(TargetEnemy), Actions.Num());
-            TargetEnemy->ShowInteractionButtons(Actions, SourceEnemy);
+            
+            // UE_LOG(LogAIInteractionDebug, Log, TEXT("[绘制完成] 尝试显示按钮 Source=%s Target=%s ActionsNum=%d"),
+            // *GetNameSafe(SourceEnemy), *GetNameSafe(TargetActor), Actions.Num());
+
+            // TargetEnemy->ShowInteractionButtons(Actions, SourceEnemy);
+            
+            if (AEnemyBase* TargetEnemy = Cast<AEnemyBase>(TargetActor))
+            {
+                TargetEnemy->ShowInteractionButtons(Actions, SourceEnemy);
+            }
+            else if (UInteractionTargetComponent* TargetComp = TargetActor ? TargetActor->FindComponentByClass<UInteractionTargetComponent>() : nullptr)
+            {
+                if (!TargetComp->OnInteractionActionChosen.IsAlreadyBound(this, &AInvisiblePlayerController::OnInteractionActionChosen))
+                {
+                    TargetComp->OnInteractionActionChosen.AddDynamic(this, &AInvisiblePlayerController::OnInteractionActionChosen);
+                }
+                TargetComp->ShowInteractionButtons(Actions, SourceEnemy);
+            }
         }
     }
     else
@@ -975,11 +1016,27 @@ void AInvisiblePlayerController::OnEditPathDragCompleted()
 
         // 显示目标ai头顶交互按钮
         AEnemyBase* SourceEnemy = Cast<AEnemyBase>(DragPawn.Get());
-        AEnemyBase* TargetEnemy = Cast<AEnemyBase>(PreviewInteractionTargetActor.Get());
-        if (bInteractionValid && SourceEnemy && TargetEnemy)
+        AActor* TargetActor = PreviewInteractionTargetActor.Get();
+
+        // AI-物体现在暂时不会显示按钮，后续添加相关逻辑
+
+        if (bInteractionValid && SourceEnemy && TargetActor)
         {
             const TArray<FInteractionActionOption>& Actions = LockedAIPaths[Index].CandidateActions;
-            TargetEnemy->ShowInteractionButtons(Actions, SourceEnemy);
+            // TargetEnemy->ShowInteractionButtons(Actions, SourceEnemy);
+
+            if (AEnemyBase* TargetEnemy = Cast<AEnemyBase>(TargetActor))
+            {
+                TargetEnemy->ShowInteractionButtons(Actions, SourceEnemy);
+            }
+            else if (UInteractionTargetComponent* TargetComp = TargetActor->FindComponentByClass<UInteractionTargetComponent>())
+            {
+                if (!TargetComp->OnInteractionActionChosen.IsAlreadyBound(this, &AInvisiblePlayerController::OnInteractionActionChosen))
+                {
+                    TargetComp->OnInteractionActionChosen.AddDynamic(this, &AInvisiblePlayerController::OnInteractionActionChosen);
+                }
+                TargetComp->ShowInteractionButtons(Actions, SourceEnemy);
+            }
         }
     }
 
@@ -1275,7 +1332,7 @@ void AInvisiblePlayerController::ClearPreviewInteraction()
 // 解析预览交互
 void AInvisiblePlayerController::ResolvePreviewInteractionUnderCursor()
 {
-    UE_LOG(LogAIInteractionDebug, Log, TEXT("[解析预览交互] DragPawn=%s bHasPreviewPath=%d"),*GetNameSafe(DragPawn.Get()), bHasPreviewPath ? 1 : 0);
+    // UE_LOG(LogAIInteractionDebug, Log, TEXT("[解析预览交互] DragPawn=%s bHasPreviewPath=%d"),*GetNameSafe(DragPawn.Get()), bHasPreviewPath ? 1 : 0);
 
     ClearPreviewInteraction();
     
@@ -1291,46 +1348,54 @@ void AInvisiblePlayerController::ResolvePreviewInteractionUnderCursor()
         return;
     }
 
-    FHitResult PawnHit;
+    FHitResult Hit;
     TArray<TEnumAsByte<EObjectTypeQuery>> ObjectTypes;
-    ObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_Pawn));
+    ObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_Pawn));   // AI-AI互动用
+    ObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_WorldDynamic));   // AI-物体互动用
 
-    const bool bHitPawn = GetHitResultUnderCursorForObjects(ObjectTypes, false, PawnHit);
+    const bool bHit = GetHitResultUnderCursorForObjects(ObjectTypes, false, Hit);
 
-    UE_LOG(LogAIInteractionDebug, Log, TEXT("[解析预览交互] bHitPawn=%d HitActor=%s"),
-    bHitPawn ? 1 : 0, *GetNameSafe(PawnHit.GetActor()));
+    // UE_LOG(LogAIInteractionDebug, Log, TEXT("[解析预览交互] bHit=%d HitActor=%s"),
+    // bHit ? 1 : 0, *GetNameSafe(Hit.GetActor()));
 
-    if(!bHitPawn)
+    if(!bHit)
     {
-        UE_LOG(LogAIInteractionDebug, Warning, TEXT("[解析预览交互] return，鼠标下没有Pawn"));
+        // UE_LOG(LogAIInteractionDebug, Warning, TEXT("[解析预览交互] return，鼠标下没有Pawn"));
         return;
     }
 
-    AActor* HitActor = PawnHit.GetActor();
-    AEnemyBase* TargetEnemy = Cast<AEnemyBase>(HitActor);
+    AActor* HitActor = Hit.GetActor();
+    // AEnemyBase* TargetEnemy = Cast<AEnemyBase>(HitActor);
 
-    UE_LOG(LogAIInteractionDebug, Log, TEXT("[解析预览交互] Source=%s Target=%s IsSelf=%d"),
-    *GetNameSafe(SourceEnemy), *GetNameSafe(TargetEnemy), (TargetEnemy == SourceEnemy) ? 1 : 0);
+    // UE_LOG(LogAIInteractionDebug, Log, TEXT("[解析预览交互] Source=%s Target=%s IsSelf=%d"),
+    // *GetNameSafe(SourceEnemy), *GetNameSafe(TargetEnemy), (TargetEnemy == SourceEnemy) ? 1 : 0);
 
-    if(!TargetEnemy || TargetEnemy ==SourceEnemy)
+    if(!HitActor || HitActor == SourceEnemy)
     {
-        //UE_LOG(LogAIInteractionDebug, Warning, TEXT("[解析预览交互] return: 不存在Target或Target与Source相同"));
+        // UE_LOG(LogAIInteractionDebug, Warning, TEXT("[解析预览交互] return: 不存在Target或Target与Source相同"));
         return;
+    }
+
+    const bool bIsEnemyTarget = Cast<AEnemyBase>(HitActor) != nullptr;
+    const bool bHasInteractionComp = HitActor->FindComponentByClass<UInteractionTargetComponent>() != nullptr;
+    if (!bIsEnemyTarget && !bHasInteractionComp)
+    {
+        return; // 场景普通物体，非可互动目标
     }
 
     TArray<FInteractionActionOption> Candidates;
     const bool bBuilt = BuildInteractionCandidates(SourceEnemy, HitActor, Candidates);
-    UE_LOG(LogAIInteractionDebug, Log, TEXT("[解析预览交互] 建立预览 bBuilt=%d Num=%d"),
-    bBuilt ? 1 : 0, Candidates.Num());
+    // UE_LOG(LogAIInteractionDebug, Log, TEXT("[解析预览交互] 建立预览 bBuilt=%d Num=%d"),
+    // bBuilt ? 1 : 0, Candidates.Num());
 
     if(bBuilt)
     {
         bHasPreviewInteraction = true;
-        PreviewInteractionTargetActor = TargetEnemy;
+        PreviewInteractionTargetActor = HitActor;
         PreviewCandidateActions = MoveTemp(Candidates);
 
-        UE_LOG(LogAIInteractionDebug, Log, TEXT("[解析预览交互] 设置预览交互 Target=%s Num=%d"),
-        *GetNameSafe(PreviewInteractionTargetActor.Get()), PreviewCandidateActions.Num());
+        // UE_LOG(LogAIInteractionDebug, Log, TEXT("[解析预览交互] 设置预览交互 Target=%s Num=%d"),
+        // *GetNameSafe(PreviewInteractionTargetActor.Get()), PreviewCandidateActions.Num());
     }
 }
 
@@ -1340,8 +1405,8 @@ bool AInvisiblePlayerController::BuildInteractionCandidates(AEnemyBase* SourceAI
 {
     OutActions.Reset();
 
-    UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] 进入 Source=%s Target=%s TraitActionProfile=%s"),
-    *GetNameSafe(SourceAI), *GetNameSafe(TargetActor), *GetNameSafe(TraitActionProfile));
+    // UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] 进入 Source=%s Target=%s TraitActionProfile=%s"),
+    // *GetNameSafe(SourceAI), *GetNameSafe(TargetActor), *GetNameSafe(TraitActionProfile));
 
     if(!SourceAI || !TargetActor || SourceAI == TargetActor)
     {
@@ -1367,12 +1432,22 @@ bool AInvisiblePlayerController::BuildInteractionCandidates(AEnemyBase* SourceAI
         TargetTags = ITraitTargetInterface::Execute_GetInteractionTargetTags(TargetActor);
         UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] 获取目标标签 TargetTags=%s"), *TargetTags.ToString());
     }
+    else if (const UInteractionTargetComponent* TargetComp = TargetActor->FindComponentByClass<UInteractionTargetComponent>())
+    {
+        TargetTags = TargetComp->GetInteractionTargetTags();
+    }
+
+    // 根据目标类型决定交互类型
+    const ETraitInteractionType WantedType = 
+        Cast<AEnemyBase>(TargetActor)
+        ? ETraitInteractionType::AI_With_AI
+        : ETraitInteractionType::AI_With_Object;
 
     // 解析 SourceEnemy 的特质，并将ai与ai的特质写入输出数组
     TArray<UTraitDefinition*> TraitDefs;
     TraitSub->ResolveTraitDefs(SourceAI->TraitTags, TraitDefs);
 
-    //UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] 解析 SourceEnemy 的特质，并将ai与ai的特质写入输出数组 TraitDefs=%d"), TraitDefs.Num());
+    // UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] 解析 SourceEnemy 的特质，并将ai与ai的特质写入输出数组 TraitDefs=%d"), TraitDefs.Num());
 
     TSet<FGameplayTag> UniqueActionTags;
 
@@ -1382,14 +1457,15 @@ bool AInvisiblePlayerController::BuildInteractionCandidates(AEnemyBase* SourceAI
 
         for(const FTraitInteractionRule& Rule : Def->Rules)
         {
-            UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] Rule Type=%d Suggested=%s ActionTag=%s TargetFilter=%s"),
-            (int32)Rule.InteractionType,
-            *Rule.SuggestedBehaviorTag.ToString(),
-            *Rule.InteractionActionTag.ToString(),
-            *Rule.TargetTagsAny.ToStringSimple());
-            if(Rule.InteractionType != ETraitInteractionType::AI_With_AI)
+            // UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] Rule Type=%d Suggested=%s ActionTag=%s TargetFilter=%s"),
+            // (int32)Rule.InteractionType,
+            // *Rule.SuggestedBehaviorTag.ToString(),
+            // *Rule.InteractionActionTag.ToString(),
+            // *Rule.TargetTagsAny.ToStringSimple());
+
+            if(Rule.InteractionType != WantedType)
             {
-                UE_LOG(LogAIInteractionDebug, Warning, TEXT("[构建预览交互] Skip: target filter failed"));
+                // UE_LOG(LogAIInteractionDebug, Warning, TEXT("[构建预览交互] Skip: target filter failed"));
                 continue;
             }
 
@@ -1401,17 +1477,17 @@ bool AInvisiblePlayerController::BuildInteractionCandidates(AEnemyBase* SourceAI
 
             const FTraitResolvedAction Resolved = UTraitActionResolver::ResolveAction(Rule, TraitActionProfile);
 
-            UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] Resolved Valid=%d Tag=%s Text=%s Cost=%.2f Radius=%.2f Duration=%.2f"),
-            Resolved.bValid ? 1 : 0,
-            *Resolved.ActionTag.ToString(),
-            *Resolved.ButtonText.ToString(),
-            Resolved.EnergyCost,
-            Resolved.ExecutionRadius,
-            Resolved.Duration);
+            // UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] Resolved Valid=%d Tag=%s Text=%s Cost=%.2f Radius=%.2f Duration=%.2f"),
+            // Resolved.bValid ? 1 : 0,
+            // *Resolved.ActionTag.ToString(),
+            // *Resolved.ButtonText.ToString(),
+            // Resolved.EnergyCost,
+            // Resolved.ExecutionRadius,
+            // Resolved.Duration);
 
             if(!Resolved.bValid || !Resolved.ActionTag.IsValid())
             {
-                UE_LOG(LogAIInteractionDebug, Warning, TEXT("[构建预览交互] Skip: invalid or empty action tag"));
+                // UE_LOG(LogAIInteractionDebug, Warning, TEXT("[构建预览交互] Skip: invalid or empty action tag"));
                 continue;
             }
 
@@ -1423,11 +1499,11 @@ bool AInvisiblePlayerController::BuildInteractionCandidates(AEnemyBase* SourceAI
             UniqueActionTags.Add(Resolved.ActionTag);
 
             FInteractionActionOption NewOption;
-            NewOption.ActionTag = Resolved.ActionTag;
             NewOption.ButtonText = Resolved.ButtonText;
-            NewOption.EnergyCost = FMath::Max(0.0f, Resolved.EnergyCost);
-            NewOption.ExecutionRadius = FMath::Max(0.0f, Resolved.ExecutionRadius);
-            NewOption.Duration = FMath::Max(0.0f, Resolved.Duration);
+            NewOption.Spec.ActionTag = Resolved.ActionTag;
+            NewOption.Spec.EnergyCost = FMath::Max(0.0f, Resolved.EnergyCost);
+            NewOption.Spec.ExecutionRadius = FMath::Max(0.0f, Resolved.ExecutionRadius);
+            NewOption.Spec.Duration = FMath::Max(0.0f, Resolved.Duration);
 
             OutActions.Add(MoveTemp(NewOption));
 
@@ -1437,7 +1513,7 @@ bool AInvisiblePlayerController::BuildInteractionCandidates(AEnemyBase* SourceAI
             }
         }
     }
-    UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] 退出 OutActions=%d"), OutActions.Num());
+    // UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] 退出 OutActions=%d"), OutActions.Num());
     return OutActions.Num() > 0;
 }
 
@@ -1479,26 +1555,26 @@ void AInvisiblePlayerController::UnregisterEnemyInteractionDelegates()
 void AInvisiblePlayerController::OnInteractionActionChosen(
     FInteractionActionOption ActionData,
     AEnemyBase* SourceAI,
-    AEnemyBase* TargetAI)
+    AActor* TargetActor)
 {
-    if (!bIsEditMode || !SourceAI || !TargetAI)
+    if (!bIsEditMode || !SourceAI || !TargetActor)
     {
         return;
     }
 
     // 进行路径查找
-    const int32 PathIndex = FindLockedInteractionPathIndex(SourceAI, TargetAI);
+    const int32 PathIndex = FindLockedInteractionPathIndex(SourceAI, TargetActor);
     // 未找到路径
     if (PathIndex == INDEX_NONE)
     {
         UE_LOG(LogTemp, Warning, TEXT("未找到对应互动路径: Source=%s Target=%s"),
-            *GetNameSafe(SourceAI), *GetNameSafe(TargetAI));
+            *GetNameSafe(SourceAI), *GetNameSafe(TargetActor));
         return;
     }
 
     // 获取路径并对比新路径与旧路径能量消耗
     FLockedAIPath& Path = LockedAIPaths[PathIndex];
-    const float NewCost = FMath::Max(0.0f, ActionData.EnergyCost);
+    const float NewCost = FMath::Max(0.0f, ActionData.Spec.EnergyCost);
     const float OldCost = Path.bActionConfirmed ? FMath::Max(0.0f, Path.ConfirmedActionCost) : 0.0f;
     const float DeltaCost = NewCost - OldCost; // >0 需要额外扣能，<0 返还差额
 
@@ -1512,10 +1588,10 @@ void AInvisiblePlayerController::OnInteractionActionChosen(
     DisplayPathEnergy = CurrentPathEnergy;
 
     Path.bActionConfirmed = true;
-    Path.ConfirmedActionTag = ActionData.ActionTag;
+    Path.ConfirmedActionTag = ActionData.Spec.ActionTag;
     Path.ConfirmedActionCost = NewCost;
-    Path.ConfirmedExecutionRadius = FMath::Max(0.0f, ActionData.ExecutionRadius);
-    Path.ConfirmedDuration = FMath::Max(0.0f, ActionData.Duration);
+    Path.ConfirmedExecutionRadius = FMath::Max(0.0f, ActionData.Spec.ExecutionRadius);
+    Path.ConfirmedDuration = FMath::Max(0.0f, ActionData.Spec.Duration);
 
     // 点击后隐藏按钮
     HideAllInteractionButtons();
@@ -1523,16 +1599,17 @@ void AInvisiblePlayerController::OnInteractionActionChosen(
     // 打印日志
     UE_LOG(LogTemp, Log, TEXT("交互行为选择: Source=%s Target=%s Action=%s Cost=%.2f"),
         SourceAI ? *SourceAI->GetName() : TEXT("None"),
-        TargetAI ? *TargetAI->GetName() : TEXT("None"),
-        *ActionData.ActionTag.ToString(),
-        ActionData.EnergyCost);
+        TargetActor ? *TargetActor->GetName() : TEXT("None"),
+        *ActionData.Spec.ActionTag.ToString(),
+        ActionData.Spec.EnergyCost);
 }
 
 
 
-// 隐藏所有ai头顶交互按钮
+// 隐藏所有头顶交互按钮
 void AInvisiblePlayerController::HideAllInteractionButtons()
 {
+    // 隐藏AI-AI互动按钮
     TArray<AActor*> FoundEnemies;
     UGameplayStatics::GetAllActorsOfClass(GetWorld(), AEnemyBase::StaticClass(), FoundEnemies);
     
@@ -1543,12 +1620,25 @@ void AInvisiblePlayerController::HideAllInteractionButtons()
             Enemy->HideInteractionButtons();
         }
     }
+
+    // 隐藏AI-物体互动按钮
+    TArray<AActor*> AllActors;
+    UGameplayStatics::GetAllActorsOfClass(GetWorld(), AActor::StaticClass(), AllActors);
+    
+    for (AActor* Actor : AllActors)
+    {
+        if (!Actor) continue;
+        if (UInteractionTargetComponent* TargetComp = Actor->FindComponentByClass<UInteractionTargetComponent>())
+        {
+            TargetComp->HideInteractionButtons();
+        }
+    }
 }
 
 // 查找从 SourceAI 到 TargetAI 的互动路径
-int32 AInvisiblePlayerController::FindLockedInteractionPathIndex(const AEnemyBase* SourceAI, const AEnemyBase* TargetAI) const
+int32 AInvisiblePlayerController::FindLockedInteractionPathIndex(const AEnemyBase* SourceAI, const AActor* TargetActor) const
 {
-    if(!SourceAI || !TargetAI) return INDEX_NONE;
+    if(!SourceAI || !TargetActor) return INDEX_NONE;
 
     for(int32 i = 0; i < LockedAIPaths.Num(); ++i)
     {
@@ -1558,7 +1648,7 @@ int32 AInvisiblePlayerController::FindLockedInteractionPathIndex(const AEnemyBas
         const AActor* SourceActor = Item.OwnerPawn.Get();
         const AActor* Target = Item.TargetActor.Get();
 
-        if(SourceActor == SourceAI && Target == TargetAI)
+        if(SourceActor == SourceAI && Target == TargetActor)
         {
             return i;
         }
