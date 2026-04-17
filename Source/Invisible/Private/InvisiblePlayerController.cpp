@@ -935,11 +935,11 @@ void AInvisiblePlayerController::OnEditPathDragCompleted()
 
     const bool bInteractionValid = bHasPreviewInteraction && PreviewInteractionTargetActor.IsValid() && PreviewCandidateActions.Num() > 0;
     
-    UE_LOG(LogAIInteractionDebug, Log, TEXT("[绘制完成] 绘制交互路径 bHasPreviewInteraction=%d TargetValid=%d CandidateNum=%d => bInteractionValid=%d"),
-    bHasPreviewInteraction ? 1 : 0,
-    PreviewInteractionTargetActor.IsValid() ? 1 : 0,
-    PreviewCandidateActions.Num(),
-    bInteractionValid ? 1 : 0);
+    // UE_LOG(LogAIInteractionDebug, Log, TEXT("[绘制完成] 绘制交互路径 bHasPreviewInteraction=%d TargetValid=%d CandidateNum=%d => bInteractionValid=%d"),
+    // bHasPreviewInteraction ? 1 : 0,
+    // PreviewInteractionTargetActor.IsValid() ? 1 : 0,
+    // PreviewCandidateActions.Num(),
+    // bInteractionValid ? 1 : 0);
 
     if(Index == INDEX_NONE)
     {
@@ -973,8 +973,8 @@ void AInvisiblePlayerController::OnEditPathDragCompleted()
         {
             const TArray<FInteractionActionOption>& Actions = (Index == INDEX_NONE) ? LockedAIPaths.Last().CandidateActions : LockedAIPaths[Index].CandidateActions;
             
-            UE_LOG(LogAIInteractionDebug, Log, TEXT("[绘制完成] 尝试显示按钮 Source=%s Target=%s ActionsNum=%d"),
-            *GetNameSafe(SourceEnemy), *GetNameSafe(TargetActor), Actions.Num());
+            // UE_LOG(LogAIInteractionDebug, Log, TEXT("[绘制完成] 尝试显示按钮 Source=%s Target=%s ActionsNum=%d"),
+            // *GetNameSafe(SourceEnemy), *GetNameSafe(TargetActor), Actions.Num());
 
             // TargetEnemy->ShowInteractionButtons(Actions, SourceEnemy);
             
@@ -1332,7 +1332,7 @@ void AInvisiblePlayerController::ClearPreviewInteraction()
 // 解析预览交互
 void AInvisiblePlayerController::ResolvePreviewInteractionUnderCursor()
 {
-    UE_LOG(LogAIInteractionDebug, Log, TEXT("[解析预览交互] DragPawn=%s bHasPreviewPath=%d"),*GetNameSafe(DragPawn.Get()), bHasPreviewPath ? 1 : 0);
+    // UE_LOG(LogAIInteractionDebug, Log, TEXT("[解析预览交互] DragPawn=%s bHasPreviewPath=%d"),*GetNameSafe(DragPawn.Get()), bHasPreviewPath ? 1 : 0);
 
     ClearPreviewInteraction();
     
@@ -1355,12 +1355,12 @@ void AInvisiblePlayerController::ResolvePreviewInteractionUnderCursor()
 
     const bool bHit = GetHitResultUnderCursorForObjects(ObjectTypes, false, Hit);
 
-    UE_LOG(LogAIInteractionDebug, Log, TEXT("[解析预览交互] bHit=%d HitActor=%s"),
-    bHit ? 1 : 0, *GetNameSafe(Hit.GetActor()));
+    // UE_LOG(LogAIInteractionDebug, Log, TEXT("[解析预览交互] bHit=%d HitActor=%s"),
+    // bHit ? 1 : 0, *GetNameSafe(Hit.GetActor()));
 
     if(!bHit)
     {
-        UE_LOG(LogAIInteractionDebug, Warning, TEXT("[解析预览交互] return，鼠标下没有Pawn"));
+        // UE_LOG(LogAIInteractionDebug, Warning, TEXT("[解析预览交互] return，鼠标下没有Pawn"));
         return;
     }
 
@@ -1372,7 +1372,7 @@ void AInvisiblePlayerController::ResolvePreviewInteractionUnderCursor()
 
     if(!HitActor || HitActor == SourceEnemy)
     {
-        UE_LOG(LogAIInteractionDebug, Warning, TEXT("[解析预览交互] return: 不存在Target或Target与Source相同"));
+        // UE_LOG(LogAIInteractionDebug, Warning, TEXT("[解析预览交互] return: 不存在Target或Target与Source相同"));
         return;
     }
 
@@ -1385,8 +1385,8 @@ void AInvisiblePlayerController::ResolvePreviewInteractionUnderCursor()
 
     TArray<FInteractionActionOption> Candidates;
     const bool bBuilt = BuildInteractionCandidates(SourceEnemy, HitActor, Candidates);
-    UE_LOG(LogAIInteractionDebug, Log, TEXT("[解析预览交互] 建立预览 bBuilt=%d Num=%d"),
-    bBuilt ? 1 : 0, Candidates.Num());
+    // UE_LOG(LogAIInteractionDebug, Log, TEXT("[解析预览交互] 建立预览 bBuilt=%d Num=%d"),
+    // bBuilt ? 1 : 0, Candidates.Num());
 
     if(bBuilt)
     {
@@ -1394,8 +1394,8 @@ void AInvisiblePlayerController::ResolvePreviewInteractionUnderCursor()
         PreviewInteractionTargetActor = HitActor;
         PreviewCandidateActions = MoveTemp(Candidates);
 
-        UE_LOG(LogAIInteractionDebug, Log, TEXT("[解析预览交互] 设置预览交互 Target=%s Num=%d"),
-        *GetNameSafe(PreviewInteractionTargetActor.Get()), PreviewCandidateActions.Num());
+        // UE_LOG(LogAIInteractionDebug, Log, TEXT("[解析预览交互] 设置预览交互 Target=%s Num=%d"),
+        // *GetNameSafe(PreviewInteractionTargetActor.Get()), PreviewCandidateActions.Num());
     }
 }
 
@@ -1405,8 +1405,8 @@ bool AInvisiblePlayerController::BuildInteractionCandidates(AEnemyBase* SourceAI
 {
     OutActions.Reset();
 
-    UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] 进入 Source=%s Target=%s TraitActionProfile=%s"),
-    *GetNameSafe(SourceAI), *GetNameSafe(TargetActor), *GetNameSafe(TraitActionProfile));
+    // UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] 进入 Source=%s Target=%s TraitActionProfile=%s"),
+    // *GetNameSafe(SourceAI), *GetNameSafe(TargetActor), *GetNameSafe(TraitActionProfile));
 
     if(!SourceAI || !TargetActor || SourceAI == TargetActor)
     {
@@ -1447,7 +1447,7 @@ bool AInvisiblePlayerController::BuildInteractionCandidates(AEnemyBase* SourceAI
     TArray<UTraitDefinition*> TraitDefs;
     TraitSub->ResolveTraitDefs(SourceAI->TraitTags, TraitDefs);
 
-    UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] 解析 SourceEnemy 的特质，并将ai与ai的特质写入输出数组 TraitDefs=%d"), TraitDefs.Num());
+    // UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] 解析 SourceEnemy 的特质，并将ai与ai的特质写入输出数组 TraitDefs=%d"), TraitDefs.Num());
 
     TSet<FGameplayTag> UniqueActionTags;
 
@@ -1457,15 +1457,15 @@ bool AInvisiblePlayerController::BuildInteractionCandidates(AEnemyBase* SourceAI
 
         for(const FTraitInteractionRule& Rule : Def->Rules)
         {
-            UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] Rule Type=%d Suggested=%s ActionTag=%s TargetFilter=%s"),
-            (int32)Rule.InteractionType,
-            *Rule.SuggestedBehaviorTag.ToString(),
-            *Rule.InteractionActionTag.ToString(),
-            *Rule.TargetTagsAny.ToStringSimple());
+            // UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] Rule Type=%d Suggested=%s ActionTag=%s TargetFilter=%s"),
+            // (int32)Rule.InteractionType,
+            // *Rule.SuggestedBehaviorTag.ToString(),
+            // *Rule.InteractionActionTag.ToString(),
+            // *Rule.TargetTagsAny.ToStringSimple());
 
             if(Rule.InteractionType != WantedType)
             {
-                UE_LOG(LogAIInteractionDebug, Warning, TEXT("[构建预览交互] Skip: target filter failed"));
+                // UE_LOG(LogAIInteractionDebug, Warning, TEXT("[构建预览交互] Skip: target filter failed"));
                 continue;
             }
 
@@ -1477,17 +1477,17 @@ bool AInvisiblePlayerController::BuildInteractionCandidates(AEnemyBase* SourceAI
 
             const FTraitResolvedAction Resolved = UTraitActionResolver::ResolveAction(Rule, TraitActionProfile);
 
-            UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] Resolved Valid=%d Tag=%s Text=%s Cost=%.2f Radius=%.2f Duration=%.2f"),
-            Resolved.bValid ? 1 : 0,
-            *Resolved.ActionTag.ToString(),
-            *Resolved.ButtonText.ToString(),
-            Resolved.EnergyCost,
-            Resolved.ExecutionRadius,
-            Resolved.Duration);
+            // UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] Resolved Valid=%d Tag=%s Text=%s Cost=%.2f Radius=%.2f Duration=%.2f"),
+            // Resolved.bValid ? 1 : 0,
+            // *Resolved.ActionTag.ToString(),
+            // *Resolved.ButtonText.ToString(),
+            // Resolved.EnergyCost,
+            // Resolved.ExecutionRadius,
+            // Resolved.Duration);
 
             if(!Resolved.bValid || !Resolved.ActionTag.IsValid())
             {
-                UE_LOG(LogAIInteractionDebug, Warning, TEXT("[构建预览交互] Skip: invalid or empty action tag"));
+                // UE_LOG(LogAIInteractionDebug, Warning, TEXT("[构建预览交互] Skip: invalid or empty action tag"));
                 continue;
             }
 
@@ -1513,7 +1513,7 @@ bool AInvisiblePlayerController::BuildInteractionCandidates(AEnemyBase* SourceAI
             }
         }
     }
-    UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] 退出 OutActions=%d"), OutActions.Num());
+    // UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] 退出 OutActions=%d"), OutActions.Num());
     return OutActions.Num() > 0;
 }
 

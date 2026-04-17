@@ -39,6 +39,10 @@ const FName AEnemyAIController::BB_IsFiring = TEXT("IsFiring");
 
 AEnemyAIController::AEnemyAIController()
 {
+    // 启用 Tick
+    PrimaryActorTick.bCanEverTick = true;
+    PrimaryActorTick.bStartWithTickEnabled = true;
+
     // 创建感知组件
     PerceptionComp = CreateDefaultSubobject<UAIPerceptionComponent>(TEXT("PerceptionComp"));
     SetPerceptionComponent(*PerceptionComp);
@@ -61,6 +65,25 @@ AEnemyAIController::AEnemyAIController()
     PerceptionComp->OnTargetPerceptionUpdated.AddDynamic(this, &AEnemyAIController::OnTargetPerceptionUpdated);
 }
 
+void AEnemyAIController::Tick(float DeltaSeconds)
+{
+    Super::Tick(DeltaSeconds);
+
+    if(!bIsRunningPendingInteraction)
+    {
+        return;
+    }
+
+    AEnemyBase* SelfEnemy = Cast<AEnemyBase>(GetPawn());
+    AActor* TargetActor = PendingInteractionContext.TargetActor.Get();
+
+    if(!SelfEnemy || !TargetActor)
+    {
+        return;
+    }
+
+    ApplyInteractionFacing(SelfEnemy, TargetActor, DeltaSeconds);
+}
 
 void AEnemyAIController::OnPossess(APawn* InPawn)
 {
@@ -68,6 +91,9 @@ void AEnemyAIController::OnPossess(APawn* InPawn)
 
     AEnemyBase* Enemy = Cast<AEnemyBase>(InPawn);
     if(!Enemy) return;
+
+    // 获取互动时转向速度
+    InteractionTurnSpeed = FMath::Max(Enemy->InteractionTurnSpeed, 0.0f);
 
     // 从敌人类获取感知参数
     SightRadius = Enemy->SightRadius;
@@ -160,6 +186,7 @@ void AEnemyAIController::OnUnPossess()
 
     GetWorldTimerManager().ClearTimer(DetectionTimerHandle);
     GetWorldTimerManager().ClearTimer(PendingInteractionTimerHandle);
+    GetWorldTimerManager().ClearTimer(InteractionFacingTimerHandle);
     Super::OnUnPossess();
 }
 
@@ -741,6 +768,7 @@ void AEnemyAIController::ClearPendingInteraction()
     PendingInteractionContext = FTraitInteractionContext(); // 清空上下文
 
     GetWorldTimerManager().ClearTimer(PendingInteractionTimerHandle);
+    GetWorldTimerManager().ClearTimer(InteractionFacingTimerHandle);
 
     // 清理待执行互动完成回调
     if(UPathFollowingComponent* PathComp = GetPathFollowingComponent())
@@ -916,7 +944,7 @@ void AEnemyAIController::BeginPendingInteractionLoop()
     // 互动期间停止移动，但不关闭检测
     StopMovement();
 
-    ApplyInteractionFacing(SelfEnemy, TargetActor);
+    ApplyInteractionFacing(SelfEnemy, TargetActor, GetWorld()->GetDeltaSeconds());
     ApplyInteractionStateLock(SelfEnemy, TargetActor, ActionTag, bIsChatLike);
 
     // // 源ai 切为互动Tag
@@ -942,7 +970,16 @@ void AEnemyAIController::BeginPendingInteractionLoop()
     //     }
     // }
 
+    GetWorldTimerManager().ClearTimer(InteractionFacingTimerHandle);
 
+    // const float FacingTickInterval = 0.016f; 
+    // GetWorldTimerManager().SetTimer(
+    //     InteractionFacingTimerHandle,
+    //     this,
+    //     &AEnemyAIController::TickInteractionFacing,
+    //     FacingTickInterval,   // 约60Hz，想省性能可用0.033f
+    //     true
+    // );
 
     BP_OnPendingInteractionStarted(TargetActor, PendingInteractionContext.Spec.ActionTag, PendingInteractionContext.Spec.Duration);
 
@@ -976,6 +1013,7 @@ void AEnemyAIController::FinishPendingInteraction()
     // 释放自身（源AI）锁，清理上下文
     SetForcedInteractionStateTag(false, FGameplayTag());
     ClearPendingInteraction();
+    GetWorldTimerManager().ClearTimer(InteractionFacingTimerHandle);
 
     // 完成互动，恢复常规巡逻ai
     if (!GetWorldTimerManager().IsTimerActive(DetectionTimerHandle))
@@ -1002,6 +1040,7 @@ void AEnemyAIController::InterruptPendingInteractionForAlert()
 
     // 清除互动计时器，避免后续又触发“正常结束”
     GetWorldTimerManager().ClearTimer(PendingInteractionTimerHandle);
+    GetWorldTimerManager().ClearTimer(InteractionFacingTimerHandle);
 
     // 通知蓝图“被中断”
     BP_OnPendingInteractionInterrupted(TargetActor, BehaviorTag);
@@ -1047,6 +1086,48 @@ void AEnemyAIController::SetForcedInteractionStateTag(bool bEnable, FGameplayTag
     }
 }
 
+// ai转向函数
+void AEnemyAIController::RotateActorToward(AActor* ActorToRotate, const FVector& TargetLocation, float DeltaSeconds) const
+{
+    if(!ActorToRotate) return;
+
+    const FVector ToTarget = (TargetLocation - ActorToRotate->GetActorLocation()).GetSafeNormal2D();
+    if(ToTarget.IsNearlyZero()) return;
+
+    const FRotator CurrentRot = ActorToRotate->GetActorRotation();
+    const FRotator TargetRot = ToTarget.Rotation();
+    const FRotator NewRot = FMath::RInterpConstantTo(
+        CurrentRot,
+        TargetRot,
+        DeltaSeconds,
+        InteractionTurnSpeed   // 度/秒
+    );
+
+    ActorToRotate->SetActorRotation(NewRot);
+}
+
+// 互动时转向计时器回调
+void AEnemyAIController::TickInteractionFacing()
+{
+    if(!bIsRunningPendingInteraction)
+    {
+        GetWorldTimerManager().ClearTimer(InteractionFacingTimerHandle);
+        return;
+    }
+
+    AEnemyBase* SelfEnemy = Cast<AEnemyBase>(GetPawn());
+    AActor* TargetActor = PendingInteractionContext.TargetActor.Get();
+
+    if(!SelfEnemy || !TargetActor)
+    {
+        GetWorldTimerManager().ClearTimer(InteractionFacingTimerHandle);
+        return;
+    }
+
+    ApplyInteractionFacing(SelfEnemy, TargetActor, GetWorld()->GetDeltaSeconds());
+    
+}
+
 // ===== 交谈行为 =====
 // 是否为交谈行为
 bool AEnemyAIController::IsChatLikeInteraction(const FGameplayTag& ActionTag) const
@@ -1066,17 +1147,19 @@ bool AEnemyAIController::IsChatLikeInteraction(const FGameplayTag& ActionTag) co
 }
 
 // 应用互动朝向
-void AEnemyAIController::ApplyInteractionFacing(AEnemyBase* SelfEnemy, AActor* TargetActor) const
+void AEnemyAIController::ApplyInteractionFacing(AEnemyBase* SelfEnemy, AActor* TargetActor, float DeltaSeconds) const
 {
     if(!SelfEnemy || !TargetActor)
     {
         return;
     }
 
+    const float Dt = FMath::Max(DeltaSeconds, KINDA_SMALL_NUMBER);
+
     const FVector ToTarget = (TargetActor->GetActorLocation() - SelfEnemy->GetActorLocation()).GetSafeNormal2D();
     if(!ToTarget.IsNearlyZero())
     {
-        SelfEnemy->SetActorRotation(ToTarget.Rotation());
+        RotateActorToward(SelfEnemy, TargetActor->GetActorLocation(), Dt);
     }
 
     if(AEnemyBase* TargetEnemy = Cast<AEnemyBase>(TargetActor))
@@ -1085,7 +1168,7 @@ void AEnemyAIController::ApplyInteractionFacing(AEnemyBase* SelfEnemy, AActor* T
 
         if(!ToSource.IsNearlyZero())
         {
-            TargetEnemy->SetActorRotation(ToSource.Rotation());
+            RotateActorToward(TargetEnemy, SelfEnemy->GetActorLocation(), Dt);
         }
     }
     
@@ -1124,7 +1207,7 @@ bool AEnemyAIController::ValidatePendingInteractionContext(const TCHAR* Phase) c
 {
     if(!PendingInteractionContext.IsValid())
     {
-        UE_LOG(LogTemp, Warning, TEXT("[Interaction][%s] 上下文存在"), Phase);
+        UE_LOG(LogTemp, Warning, TEXT("[Interaction][%s] 上下文无效"), Phase);
         return false;
     }
 

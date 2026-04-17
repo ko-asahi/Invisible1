@@ -22,6 +22,8 @@ class INVISIBLE_API AEnemyAIController : public AAIController
 {
 	GENERATED_BODY()
 	
+public:
+    virtual void Tick(float DeltaSeconds) override;
 
 public:
     AEnemyAIController();
@@ -91,6 +93,19 @@ public:
     bool bChattyLockTargetState = true;
 
 private:
+    // ===== 交互相关参数 =====
+    // 互动时转向速度（从 EnemyBase 获取）
+    float InteractionTurnSpeed = 360.0f;
+
+    // 互动时转向计时器
+    FTimerHandle InteractionFacingTimerHandle;
+    
+    // 互动时转向计时器回调
+    void TickInteractionFacing();
+
+    // ai转向函数
+    void RotateActorToward(AActor* ActorToRotate, const FVector& TargetLocation, float DeltaSeconds) const;
+
     // ===== 交谈行为 =====
     // 当前交谈目标的AI控制器
     TWeakObjectPtr<AEnemyAIController> ActiveInteractionTargetController;
@@ -99,7 +114,7 @@ private:
     bool IsChatLikeInteraction(const FGameplayTag& ActionTag) const;
 
     // 应用互动朝向
-    void ApplyInteractionFacing(AEnemyBase* SelfEnemy, AActor* TargetActor) const;
+    void ApplyInteractionFacing(AEnemyBase* SelfEnemy, AActor* TargetActor, float DeltaSeconds) const;
 
     // 处理应用状态互动锁
     void ApplyInteractionStateLock(AEnemyBase* SelfEnemy, AActor* TargetActor, const FGameplayTag& ActionTag, bool bIsChatLike);
