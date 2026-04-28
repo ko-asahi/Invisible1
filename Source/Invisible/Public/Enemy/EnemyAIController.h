@@ -14,6 +14,14 @@
 
 class APlayerCharacter;
 
+// 广播事件结束信息
+DECLARE_MULTICAST_DELEGATE_FourParams(
+    FOnInteractionResolvedNative,
+    AActor* /*SourceActor*/,
+    AActor* /*TargetActor*/,
+    FGameplayTag /*ActionTag*/,
+    EInteractionEndReason /*EndReason*/);
+
 /**
  * 敌人AI控制器，负责敌人的AI行为和感知
  */
@@ -24,6 +32,9 @@ class INVISIBLE_API AEnemyAIController : public AAIController
 	
 public:
     virtual void Tick(float DeltaSeconds) override;
+
+    // 广播事件结束信息
+    FOnInteractionResolvedNative OnInteractionResolvedNative;
 
 public:
     AEnemyAIController();
@@ -92,6 +103,22 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction")
     bool bChattyLockTargetState = true;
 
+    // ===== 交互相关参数 =====
+    // ===== 外部等待锁（用于“目标AI原地等待”）=====
+
+    // 目标朝向A走到的预估位置
+    void SetExternalApproachHoldByLocation(const FVector& InFaceLocation);
+
+    // 目标朝向最终修正到A走到的位置
+    void SetExternalApproachHoldByActor(AActor* InFaceActor);
+
+    // 清除外部等待锁
+    void ClearExternalApproachHold();
+
+    // 是否存在外部等待锁
+    bool HasExternalApproachHold() const { return bExternalApproachHold; }
+
+
 private:
     // ===== 交互相关参数 =====
     // 互动时转向速度（从 EnemyBase 获取）
@@ -105,6 +132,16 @@ private:
 
     // ai转向函数
     void RotateActorToward(AActor* ActorToRotate, const FVector& TargetLocation, float DeltaSeconds) const;
+
+    // ===== 外部等待锁（用于“目标AI原地等待”）=====
+    bool bExternalApproachHold = false;
+
+    // 朝向模式：位置优先，其次Actor
+    bool bExternalHoldUseFaceLocation = false;
+    FVector ExternalHoldFaceLocation = FVector::ZeroVector;
+    // 朝向目标Actor
+    TWeakObjectPtr<AActor> ExternalHoldFaceActor;
+    
 
     // ===== 交谈行为 =====
     // 当前交谈目标的AI控制器
@@ -122,6 +159,21 @@ private:
 
     // 上下文检验（用于校验当前代码是否存在问题）
     bool ValidatePendingInteractionContext(const TCHAR* Phase) const;
+
+    // ===== 斗殴运动扭曲运行时参数（从EnemyBase同步）=====
+    // 是否启用斗殴运动扭曲
+    bool bEnableBrawlMotionWarping = true;
+    // 斗殴行为根标签
+    FGameplayTag BrawlBehaviorRootTag;
+    // 斗殴运动扭曲目标名称 
+    FName BrawlWarpTargetName = TEXT("BrawlTarget");
+    // 斗殴运动扭曲目标半间距
+    float BrawlHalfSpacing = 80.0f;
+
+    // 是否为斗殴行为
+    bool IsBrawlInteraction(const FGameplayTag& ActionTag) const;
+    // 应用斗殴运动扭曲
+    void ApplyBrawlMotionWarping(AEnemyBase* SelfEnemy, AActor* TargetActor, const FGameplayTag& ActionTag) const;
 
 private:
     // =====视觉警戒值检测相关=====
@@ -382,6 +434,50 @@ public:
     // 保证 TickDetection 的自动清理不会在任务结束前提前触发
     UFUNCTION(BlueprintCallable, Category="AI|Perception|Investigate")
     void ExtendInterestHoldTime(float Duration);
+
+
+// ===== 头顶文本显示功能 =====
+public:
+    // 是否启用行为头顶显示
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction")
+    bool bEnableInteractionDialogueBubble = true;
+
+    // 是否启用交谈双方错峰显示
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction|Dialogue")
+    bool bEnableStaggeredChatBubble = true;
+
+    // 源AI对话框延迟（秒）
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction|Dialogue", meta=(ClampMin="0.0"))
+    float SourceBubbleDelay = 0.0f;
+
+    // 目标AI对话框延迟（秒）
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction|Dialogue", meta=(ClampMin="0.0"))
+    float TargetBubbleDelay = 0.35f;
+
+private:
+    // 互动开始时显示头顶文本
+    void TryShowInteractionDialogueBubble(
+        AEnemyBase* SelfEnemy,
+        AActor* TargetActor,
+        const FGameplayTag& ActionTag,
+        bool bIsChatLike
+    );
+
+    // 隐藏头顶文本（在互动结束或中断时隐藏）
+    void HideInteractionDialogueBubble(
+        AEnemyBase* SelfEnemy,
+        AActor* TargetActor
+    ) const;
+
+    // 源/目标延迟显示计时器
+    FTimerHandle SourceBubbleDelayTimerHandle;
+    FTimerHandle TargetBubbleDelayTimerHandle;
+
+    // 对话延迟显示
+    void ScheduleDialogueBubble(AEnemyBase* InEnemy, const FText& InLine, float InDelay, FTimerHandle& InHandle);
+
+    // 清除延迟显示计时器
+    void ClearDialogueBubbleDelayTimers();
 
 
 // ===== 状态机 =====
