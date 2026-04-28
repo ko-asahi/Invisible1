@@ -46,8 +46,14 @@ EBTNodeResult::Type UBTTask_ClearInvestigateState::ExecuteTask(UBehaviorTreeComp
         }
     }
 
-    BB->SetValueAsBool(IsChasingKey.SelectedKeyName, false);
-    BB->SetValueAsFloat(AlertnessKey.SelectedKeyName, 0.0f);
+    if (bResetChasingOnClear)
+    {
+        BB->SetValueAsBool(IsChasingKey.SelectedKeyName, false);
+    }
+    if (bResetAlertnessOnClear)
+    {
+        BB->SetValueAsFloat(AlertnessKey.SelectedKeyName, 0.0f);
+    }
 
     return EBTNodeResult::Succeeded;
 }

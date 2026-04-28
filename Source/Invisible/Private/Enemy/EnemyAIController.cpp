@@ -452,6 +452,15 @@ void AEnemyAIController::TickDetection()
         UE_LOG(LogTemp, Warning, TEXT("[AI] 看向阶段超时，强制解锁 IsInvestigating"));
     }
 
+    // ===== 追击阈值优先：已到追击阈值时强制中断看向阶段 =====
+    // 这样不需要等看向超时，Alertness 一到 ChaseThreshold 就立刻进入移动阶段
+    if (bChasing && bIsCurrentlyFacing)
+    {
+        BB->SetValueAsBool(BB_IsInvestigating, false);
+        bIsCurrentlyFacing = false;
+        UE_LOG(LogTemp, Warning, TEXT("[AI] 达到追击阈值，强制中断看向阶段，切入移动"));
+    }
+
     // ===== 打探阈值后更新移动目标（仅在看向阶段结束后执行） =====
     if (bChasing && !bIsCurrentlyFacing && BB->GetValueAsBool(BB_HasInterest))
     {
@@ -505,6 +514,28 @@ void AEnemyAIController::TickDetection()
 
     // 每帧同步AI状态Tag
     UpdateAIStateTags();
+
+    // ===== 调试日志：实时打印打探相关状态 =====
+    if (AEnemyBase* Enemy = Cast<AEnemyBase>(GetPawn()))
+    {
+        const bool bDbgHasInterest = BB->GetValueAsBool(BB_HasInterest);
+        const bool bDbgIsInvestigating = BB->GetValueAsBool(BB_IsInvestigating);
+        const bool bDbgIsChasing = BB->GetValueAsBool(BB_IsChasing);
+        const float DbgAlertness = BB->GetValueAsFloat(BB_Alertness);
+        const FString DbgAIStateTag = Enemy->AIStateTags.IsEmpty() ? TEXT("None") : Enemy->AIStateTags.ToStringSimple();
+
+        UE_LOG(
+            LogTemp,
+            Warning,
+            TEXT("[AI Debug][%s] HasInterest=%d IsInvestigating=%d IsChasing=%d Alertness=%.2f AIStateTag=%s"),
+            *GetNameSafe(Enemy),
+            (int32)bDbgHasInterest,
+            (int32)bDbgIsInvestigating,
+            (int32)bDbgIsChasing,
+            DbgAlertness,
+            *DbgAIStateTag
+        );
+    }
 }
 
 // 判断玩家是否在视野范围内
