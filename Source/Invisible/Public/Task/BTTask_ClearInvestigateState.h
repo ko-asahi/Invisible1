@@ -53,4 +53,12 @@ private:
 	
     UPROPERTY(EditAnywhere, Category="Options")
     bool bClearControllerRuntimeMemory = true;
+
+    // 是否在清理打探状态时强制重置追击状态（默认不重置，避免动画状态来回抖动）
+    UPROPERTY(EditAnywhere, Category="Options")
+    bool bResetChasingOnClear = false;
+
+    // 是否在清理打探状态时强制清零警戒值（默认不清零，避免刚进入打探移动又回落为巡逻）
+    UPROPERTY(EditAnywhere, Category="Options")
+    bool bResetAlertnessOnClear = false;
 };

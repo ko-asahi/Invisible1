@@ -15,8 +15,9 @@
  */
 
 
-
+class UMotionWarpingComponent;
 class UAIInteractionButtonsWidget;
+class UAIDialogueBubbleWidget;
 
 // 敌人警戒配置结构体
 USTRUCT(BlueprintType)
@@ -308,11 +309,57 @@ public:
     void HideInteractionButtons();
 
 
-protected:
+    // ===== ai对话框相关 =====
+
+    // 头顶对话框组件
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="UI|Dialogue")
+    class UWidgetComponent* DialogueBubbleWidgetComp;
+
+    // 头顶对话框类（蓝图指定）
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="UI|Dialogue")
+    TSubclassOf<UAIDialogueBubbleWidget> DialogueBubbleWidgetClass;
+
+    // 显示头顶对话框
+    UFUNCTION(BlueprintCallable, Category="AI|Dialogue")
+    void ShowDialogueBubble(const FText& InText);
+
+    // 隐藏头顶对话框
+    UFUNCTION(BlueprintCallable, Category="AI|Dialogue")
+    void HideDialogueBubble();
+
+    // ===== ai交互行为相关 =====
+
+    // 互动时转向速度
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction", meta = (ClampMin = "0.0"))
+    float InteractionTurnSpeed = 180.0f;
+
+    // ===== 斗殴运动扭曲配置 =====
+
+    // 运动扭曲组件
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="AI|Animation")
+    UMotionWarpingComponent* MotionWarpingComp = nullptr;
+
+    // 是否启用斗殴运动扭曲
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction|BrawlWarp")
+    bool bEnableBrawlMotionWarping = true;
+
+    // 斗殴行为根标签
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction|BrawlWarp", meta=(Categories="Behavior.AI"))
+    FGameplayTag BrawlBehaviorRootTag;
+
+    // 斗殴运动扭曲目标名称 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction|BrawlWarp")
+    FName BrawlWarpTargetName = TEXT("BrawlTarget");
+
+    // 斗殴运动扭曲目标半间距
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction|BrawlWarp", meta=(ClampMin="10.0"))
+    float BrawlHalfSpacing = 80.0f;
+    
+    protected:
     // 按键点击句柄
     UFUNCTION()
     void HandleInteractionButtonClicked(
         FInteractionActionOption ActionData,
         AEnemyBase* SourceAI,
-        AEnemyBase* TargetAI);
+        AActor* TargetActor);
 };

@@ -1,9 +1,9 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-
+#include "Enemy/Trait/TraitActionResolver.h"
 #include "Enemy/Trait/TraitDefinition.h"
 #include "Enemy/Trait/TraitActionProfile.h"
-#include "Enemy/Trait/TraitActionResolver.h"
+
 
 // 写入并返回行为配置
 FTraitResolvedAction UTraitActionResolver::ResolveAction(

@@ -10,8 +10,10 @@
 #include "Components/WidgetComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Enemy/UI/AIInteractionButtonsWidget.h"
+#include "Enemy/UI/AIDialogueBubbleWidget.h"
+#include "MotionWarpingComponent.h"
 
-DEFINE_LOG_CATEGORY_STATIC(LogAIInteractionDebug, Log, All);
+DEFINE_LOG_CATEGORY_STATIC(LogAIEnemyInteractionDebug, Log, All);
 
 
 // Sets default values
@@ -52,6 +54,20 @@ AEnemyBase::AEnemyBase()
     InteractionButtonsWidgetComp->SetRelativeScale3D(FVector::OneVector);
     InteractionButtonsWidgetComp->SetRelativeLocation(FVector(0.f, 0.f, 140.f));
     InteractionButtonsWidgetComp->SetVisibility(false);
+
+    // 对话框组件
+    DialogueBubbleWidgetComp = CreateDefaultSubobject<UWidgetComponent>(TEXT("DialogueBubbleWidgetComp"));
+    DialogueBubbleWidgetComp->SetupAttachment(GetCapsuleComponent());
+    DialogueBubbleWidgetComp->SetWidgetSpace(EWidgetSpace::Screen);
+    DialogueBubbleWidgetComp->SetDrawAtDesiredSize(true);
+    DialogueBubbleWidgetComp->SetPivot(FVector2D(0.5f, 1.0f));
+    DialogueBubbleWidgetComp->SetRelativeRotation(FRotator::ZeroRotator);
+    DialogueBubbleWidgetComp->SetRelativeScale3D(FVector::OneVector);
+    DialogueBubbleWidgetComp->SetRelativeLocation(FVector(0.f, 0.f, 185.f)); // 比交互按钮略高
+    DialogueBubbleWidgetComp->SetVisibility(false);
+
+    // 运动扭曲组件
+    MotionWarpingComp = CreateDefaultSubobject<UMotionWarpingComponent>(TEXT("MotionWarpingComp"));
 }
 
 // Called when the game starts or when spawned
@@ -66,6 +82,13 @@ void AEnemyBase::BeginPlay()
         InteractionButtonsWidgetComp->InitWidget();
     }
 	
+    // 初始化头顶对话框
+    if(DialogueBubbleWidgetClass && DialogueBubbleWidgetComp)
+    {
+        DialogueBubbleWidgetComp->SetWidgetClass(DialogueBubbleWidgetClass);
+        DialogueBubbleWidgetComp->InitWidget();
+        DialogueBubbleWidgetComp->SetVisibility(false, true);
+    }
 }
 
 // Called every frame
@@ -237,7 +260,7 @@ void AEnemyBase::ShowInteractionButtons(const TArray<FInteractionActionOption>& 
     UAIInteractionButtonsWidget* Widget = Cast<UAIInteractionButtonsWidget>(InteractionButtonsWidgetComp->GetUserWidgetObject());
     if (!Widget) 
     {
-        UE_LOG(LogTemp, Warning, TEXT("显示头顶交互按钮失败: %s"), *InSourceAI->GetName());
+        UE_LOG(LogTemp, Warning, TEXT("显示头顶交互按钮失败: %s"), *GetNameSafe(InSourceAI));
         return;
     }
 
@@ -250,8 +273,8 @@ void AEnemyBase::ShowInteractionButtons(const TArray<FInteractionActionOption>& 
     Widget->SetupAction(InActions, InSourceAI, this);
     InteractionButtonsWidgetComp->SetVisibility(InActions.Num() > 0,true);
 
-    UE_LOG(LogTemp, Log, TEXT("显示头顶交互按钮: %s"), *InSourceAI->GetName());
-    UE_LOG(LogAIInteractionDebug, Log, TEXT("[显示头顶交互按钮] Enter Self=%s Source=%s InActions=%d Comp=%s WidgetClass=%s"),
+    UE_LOG(LogTemp, Log, TEXT("显示头顶交互按钮: %s"), *GetNameSafe(InSourceAI));
+    UE_LOG(LogAIEnemyInteractionDebug, Log, TEXT("[显示头顶交互按钮] Enter Self=%s Source=%s InActions=%d Comp=%s WidgetClass=%s"),
     *GetNameSafe(this),
     *GetNameSafe(InSourceAI),
     InActions.Num(),
@@ -276,8 +299,51 @@ void AEnemyBase::HideInteractionButtons()
 void AEnemyBase::HandleInteractionButtonClicked(
     FInteractionActionOption ActionData,
     AEnemyBase* SourceAI,
-    AEnemyBase* TargetAI)
+    AActor* TargetActor)
 {
-    OnInteractionActionChosen.Broadcast(ActionData, SourceAI, TargetAI);
+    OnInteractionActionChosen.Broadcast(ActionData, SourceAI, TargetActor);
 }
 
+
+// ===== ai对话框相关 =====
+
+// 显示头顶对话框
+void AEnemyBase::ShowDialogueBubble(const FText& InText)
+{
+    if(!DialogueBubbleWidgetComp) return;
+
+    if(InText.IsEmpty())
+    {
+        HideDialogueBubble();
+        return;
+    }
+
+    if(DialogueBubbleWidgetClass && !DialogueBubbleWidgetComp->GetWidgetClass())
+    {
+        DialogueBubbleWidgetComp->SetWidgetClass(DialogueBubbleWidgetClass);
+        DialogueBubbleWidgetComp->InitWidget();
+    }
+
+    UAIDialogueBubbleWidget* Widget = Cast<UAIDialogueBubbleWidget>(DialogueBubbleWidgetComp->GetUserWidgetObject());
+    if(!Widget)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("显示头顶对话框失败: %s"), *GetNameSafe(this));
+        return;
+    }
+
+    Widget->ShowDialogueText(InText);
+    DialogueBubbleWidgetComp->SetVisibility(true, true);
+}
+
+// 隐藏头顶对话框
+void AEnemyBase::HideDialogueBubble()
+{
+    if(!DialogueBubbleWidgetComp) return;
+
+    if(UAIDialogueBubbleWidget* Widget = Cast<UAIDialogueBubbleWidget>(DialogueBubbleWidgetComp->GetUserWidgetObject()))
+    {
+        Widget->ClearDialogueText();
+    }
+
+    DialogueBubbleWidgetComp->SetVisibility(false, true);
+}

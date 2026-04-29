@@ -9,7 +9,7 @@
 #include "TraitSubsystem.generated.h"
 
 /**
- * TraitSubsystem是一个自定义子系统，负责构建起 Tag 与 TraitDefinition 间的关系
+ * TraitSubsystem是一个自定义子系统，负责构建起 Tag 与 TraitDefinition 间的关系（关联Tag和行为配置）
  */
 UCLASS()
 class INVISIBLE_API UTraitSubsystem : public UGameInstanceSubsystem

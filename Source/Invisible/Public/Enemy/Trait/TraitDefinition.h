@@ -8,7 +8,9 @@
 #include "TraitDefinition.generated.h"
 
 /**
- * UTraitDefinition是一个自定义数据资产，用于定义特质的行为参数以及相关UI文本
+ * UTraitDefinition是一个自定义数据资产，用于定义特质的行为参数以及相关UI文本（设定行为参数）（用于创建数据资产）
+ * TraitDefinition 解析链：UTraitDefinition数据资产中设置值，并放入 UTraitCatalog 数据资产中，在 TraitSubsystem 中构建起 Tag 与 TraitDefinition 间的关系（关联Tag和行为配置）
+ * 在获取时，通过 TraitSubsystem 的 ResolveTraitDefs 函数，获取对应的 TraitDefinition 数据资产
  */
 
 UENUM(BlueprintType)
