@@ -480,6 +480,13 @@ private:
     void ClearDialogueBubbleDelayTimers();
 
 
+// ===== 游戏结束 =====
+public:
+    // 进入游戏结束开火状态
+    UFUNCTION(BlueprintCallable, Category="AI|GameOver")
+    void EnterGameOverFire(AActor* TargetActor);
+
+
 // ===== 状态机 =====
 private:
     // AI状态标签缓存

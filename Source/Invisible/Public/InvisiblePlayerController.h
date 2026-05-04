@@ -333,6 +333,16 @@ public:
 	bool bUnlockPairLockOnInteractionEnd = true;
 
 
+	// ===== 游戏结束功能 =====
+
+	// 设置游戏输入锁定
+	UFUNCTION(BlueprintCallable, Category="GameOver")
+	void SetGameplayInputLocked(bool bLocked);
+
+	// 获取游戏输入是否锁定
+	UFUNCTION(BlueprintPure, Category="GameOver")
+	bool IsGameplayInputLocked() const { return bGameplayInputLocked; }
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -540,8 +550,10 @@ protected:
 
 	// 注册ai事件结束委托
 	void RegisterEnemyInteractionResolvedDelegates();
+
 	// 注销ai事件结束委托
 	void UnregisterEnemyInteractionResolvedDelegates();
+
 	// 处理ai事件结束
 	void HandleInteractionResolvedFromAI(
 		AActor* SourceActor,
@@ -558,6 +570,13 @@ protected:
 		const APawn* SourcePawn,
 		const AActor* TargetActor,
 		FVector& OutExpectedPoint) const;
+
+
+	// ===== 游戏结束功能 =====
+
+	// 游戏输入是否锁定
+	UPROPERTY(BlueprintReadOnly, Category="GameOver")
+	bool bGameplayInputLocked = false;
 
 private:
 	// 生成相机实例(运行时)

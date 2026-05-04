@@ -17,6 +17,7 @@
 #include "Perception/AISense_Hearing.h"
 #include "Enemy/Interaction/AIBehaviorDialogueSubsystem.h"
 #include "Engine/GameInstance.h"
+#include "Invisible_GameModeBase.h"
 
 // Blackboard 键名定义
 const FName AEnemyAIController::BB_TargetActor      = TEXT("TargetActor");
@@ -384,6 +385,23 @@ void AEnemyAIController::TickDetection()
 
     Alertness = FMath::Clamp(Alertness, 0.f, MaxAlertness);
     const bool bChasing = (Alertness >= ChaseThreshold);
+    const bool bAlertFull = MaxAlertness > KINDA_SMALL_NUMBER && Alertness >= MaxAlertness - KINDA_SMALL_NUMBER;
+    if(bAlertFull)
+    {
+        if(AInvisible_GameModeBase* GameMode = Cast<AInvisible_GameModeBase>(UGameplayStatics::GetGameMode(this)))
+        {
+            if(!GameMode->IsGameOverStarted())
+            {
+                if(AEnemyBase* Enemy = Cast<AEnemyBase>(GetPawn()))
+                {
+                    EnterGameOverFire(Player);
+                    GameMode->BeginGameOver(Enemy);
+                    UE_LOG(LogTemp, Log, TEXT("[AI] 警戒值满，进入游戏结束开火状态"));
+                }
+            }
+        }
+        return;
+    }
 
     if (bInterruptInteractionOnChase && bIsRunningPendingInteraction && bChasing)
     {
@@ -524,17 +542,17 @@ void AEnemyAIController::TickDetection()
         const float DbgAlertness = BB->GetValueAsFloat(BB_Alertness);
         const FString DbgAIStateTag = Enemy->AIStateTags.IsEmpty() ? TEXT("None") : Enemy->AIStateTags.ToStringSimple();
 
-        UE_LOG(
-            LogTemp,
-            Warning,
-            TEXT("[AI Debug][%s] HasInterest=%d IsInvestigating=%d IsChasing=%d Alertness=%.2f AIStateTag=%s"),
-            *GetNameSafe(Enemy),
-            (int32)bDbgHasInterest,
-            (int32)bDbgIsInvestigating,
-            (int32)bDbgIsChasing,
-            DbgAlertness,
-            *DbgAIStateTag
-        );
+        // UE_LOG(
+        //     LogTemp,
+        //     Warning,
+        //     TEXT("[AI Debug][%s] HasInterest=%d IsInvestigating=%d IsChasing=%d Alertness=%.2f AIStateTag=%s"),
+        //     *GetNameSafe(Enemy),
+        //     (int32)bDbgHasInterest,
+        //     (int32)bDbgIsInvestigating,
+        //     (int32)bDbgIsChasing,
+        //     DbgAlertness,
+        //     *DbgAIStateTag
+        // );
     }
 }
 
@@ -719,7 +737,15 @@ void AEnemyAIController::MoveToInjectedPoint(int32 PointIndex)
     }
 
     const FVector Goal = InjectedPathPoints[PointIndex];
-    const EPathFollowingRequestResult::Type Req = MoveToLocation(Goal, 30.0f, false, true, true, false, nullptr, true);
+    float AcceptRadius = 30.0f;
+    // 关键修复：交互路径的最后一点，不再用固定30，而用交互半径
+    const bool bIsLastInjectedPoint = (PointIndex == InjectedPathPoints.Num() - 1);
+    if (bIsLastInjectedPoint && HasValidPendingInteraction())
+    {
+        AcceptRadius = FMath::Max(30.0f, PendingInteractionExecutionRadius);
+    }
+    const EPathFollowingRequestResult::Type Req = MoveToLocation(Goal, AcceptRadius, false, true, true, false, nullptr, true);
+
     
     if (Req == EPathFollowingRequestResult::Failed)
     {
@@ -1660,6 +1686,61 @@ void AEnemyAIController::HideInteractionDialogueBubble(AEnemyBase* SelfEnemy, AA
         TargetEnemy->HideDialogueBubble();
     }
 }
+
+
+// ===== 游戏结束 =====
+// 进入游戏结束开火状态
+void AEnemyAIController::EnterGameOverFire(AActor* TargetActor)
+{
+    StopMovement();
+    GetWorldTimerManager().ClearTimer(DetectionTimerHandle);
+    GetWorldTimerManager().ClearTimer(PendingInteractionTimerHandle);
+    GetWorldTimerManager().ClearTimer(InteractionFacingTimerHandle);
+
+    bUseForcedInteractionStateTag = false;
+    ForcedInteractionStateTag = FGameplayTag();
+    
+    if(UBrainComponent* Brain = GetBrainComponent())
+    {
+        Brain->StopLogic(TEXT("游戏结束开火状态"));
+    }
+
+    if(APawn* ControlledPawn = GetPawn())
+    {
+        if(UCharacterMovementComponent* MoveComp = ControlledPawn->FindComponentByClass<UCharacterMovementComponent>())
+        {
+            MoveComp->StopMovementImmediately();
+        }
+
+        if(TargetActor)
+        {
+            const FVector ToTarget = (TargetActor->GetActorLocation() - ControlledPawn->GetActorLocation()).GetSafeNormal2D();
+            if(!ToTarget.IsNearlyZero())
+            {
+                ControlledPawn->SetActorRotation(ToTarget.Rotation());
+            }
+        }
+    }
+
+    if(UBlackboardComponent* BB = GetBlackboardComponent())
+    {
+        BB->SetValueAsBool(BB_IsFiring, true);
+        BB->SetValueAsBool(BB_IsChasing, false);
+        BB->SetValueAsBool(BB_IsInvestigating, false);
+        BB->SetValueAsBool(BB_HasInterest, false);
+    }
+
+    if (!Tag_AI_Fire.IsValid())
+    {
+        Tag_AI_Fire = FGameplayTag::RequestGameplayTag(FName("State.AI.Combat.Fire"));
+    }
+
+    if (AEnemyBase* Enemy = Cast<AEnemyBase>(GetPawn()))
+    {
+        Enemy->SetAIStateTag(Tag_AI_Fire);
+    }
+}
+
 
 
 // ===== 状态机 =====

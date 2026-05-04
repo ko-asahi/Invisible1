@@ -4,7 +4,11 @@
 #include "Camera/EditModeCamera.h"
 #include "Camera/CameraComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/DecalComponent.h"       
+#include "Kismet/KismetMathLibrary.h" 
 #include "GameFramework/PlayerController.h"
+#include "Engine/World.h"
+#include "CollisionQueryParams.h"
 
 // Sets default values
 AEditModeCamera::AEditModeCamera()
@@ -41,10 +45,10 @@ AEditModeCamera::AEditModeCamera()
 	Camera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 
 	// 鼠标投影指示器组件
-	GroundRingMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("GroundRingMesh"));
-	GroundRingMesh->SetupAttachment(RootComponent);
-	GroundRingMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	GroundRingMesh->SetVisibility(false);
+	GroundRingDecal = CreateDefaultSubobject<UDecalComponent>(TEXT("GroundRingDecal"));
+	GroundRingDecal->SetupAttachment(RootComponent);
+	GroundRingDecal->DecalSize = GroundRingDecalSize;
+	GroundRingDecal->SetVisibility(false);
 
 }
 
@@ -52,6 +56,14 @@ AEditModeCamera::AEditModeCamera()
 void AEditModeCamera::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// 指示器与图标材质绑定
+	if (GroundRingDecal && GroundRingDecalMaterial)
+	{
+		GroundRingDecal->SetDecalMaterial(GroundRingDecalMaterial);
+		GroundRingDecal->DecalSize = GroundRingDecalSize;
+	}
+
 	ApplyRotation();
 }
 
@@ -91,23 +103,53 @@ void AEditModeCamera::OrbitCamera(float DeltaYaw)
 	ApplyRotation();
 }
 
-// 更新鼠标投影指示器
+// 更新鼠标投影指示器（仅投影到地面）
 void AEditModeCamera::UpdateGroundRing(APlayerController* PC)
 {
-	if(!PC) return;
-
-	// 获取鼠标世界位置
-	FHitResult HitResult;
-
-	if(PC->GetHitResultUnderCursor(ECC_Visibility, false, HitResult))
+	if (!PC || !GroundRingDecal)
 	{
-		GroundRingMesh->SetWorldLocation(HitResult.Location + FVector(0.0f, 0.0f, 2.0f));
-		GroundRingMesh->SetVisibility(true);
+		return;
 	}
-	else
+
+	UWorld* World = GetWorld();
+	if (!World)
 	{
-		GroundRingMesh->SetVisibility(false);
+		return;
 	}
+
+	// 鼠标 → 世界射线
+	FVector WorldOrigin;
+	FVector WorldDirection;
+	if (!PC->DeprojectMousePositionToWorld(WorldOrigin, WorldDirection))
+	{
+		GroundRingDecal->SetVisibility(false);
+		return;
+	}
+
+	constexpr float TraceLength = 100000.0f;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(EditModeCursorTrace), /*bTraceComplex*/ false, this);
+	Params.AddIgnoredActor(this);
+
+	FHitResult Hit;
+	if (!World->LineTraceSingleByChannel(Hit, WorldOrigin, WorldOrigin + WorldDirection * TraceLength, ECC_Visibility, Params))
+	{
+		GroundRingDecal->SetVisibility(false);
+		return;
+	}
+
+	// 只处理法线朝上的水平面（ImpactNormal.Z > 0.7 ≈ 倾斜角 < 45°）
+	if (Hit.ImpactNormal.Z < 0.7f)
+	{
+		GroundRingDecal->SetVisibility(false);
+		return;
+	}
+
+	// Decal +X 轴指向 -Z（竖直向下投影），Decal 始终水平贴地
+	static const FRotator GroundDecalRotation(-90.0f, 0.0f, 0.0f);
+
+	GroundRingDecal->SetWorldLocation(Hit.ImpactPoint);
+	GroundRingDecal->SetWorldRotation(GroundDecalRotation);
+	GroundRingDecal->SetVisibility(true);
 }
 
 // 应用旋转

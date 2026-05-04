@@ -192,6 +192,8 @@ void AInvisiblePlayerController::SetupInputComponent()
 // =====切换模式=====
 void AInvisiblePlayerController::SwitchMode()
 {
+    if (bGameplayInputLocked) return;
+
     bIsEditMode = !bIsEditMode;
 
     // 进入编辑模式
@@ -482,6 +484,7 @@ void AInvisiblePlayerController::UpdateInputContext()
 // 移动输入
 void AInvisiblePlayerController::OnMove(const FInputActionValue& Value)
 {
+    if (bGameplayInputLocked) return;
     if(bIsEditMode) return;
 
     // 获取玩家输入向量
@@ -516,6 +519,8 @@ void AInvisiblePlayerController::OnMove(const FInputActionValue& Value)
 // 旋转状态触发
 void AInvisiblePlayerController::OnRotateHoldStarted()
 {
+    if (bGameplayInputLocked) return;
+
     bRotateHeld = true;
 
     UE_LOG(LogTemp, Log, TEXT("镜头旋转启动"));
@@ -524,6 +529,8 @@ void AInvisiblePlayerController::OnRotateHoldStarted()
 // 旋转状态结束
 void AInvisiblePlayerController::OnRotateHoldCompleted()
 {
+    if (bGameplayInputLocked) return;
+
     bRotateHeld = false;
 
     UE_LOG(LogTemp, Log, TEXT("镜头旋转结束"));
@@ -532,6 +539,7 @@ void AInvisiblePlayerController::OnRotateHoldCompleted()
 // 相机旋转
 void AInvisiblePlayerController::OnRotate(const FInputActionValue& Value)
 {
+    if (bGameplayInputLocked) return;
     if(bIsEditMode) return;
     //if(!bRotateHeld) return;
 
@@ -547,6 +555,7 @@ void AInvisiblePlayerController::OnRotate(const FInputActionValue& Value)
 // 蹲下起立状态切换
 void AInvisiblePlayerController::OnCrouchToggle()
 {
+    if (bGameplayInputLocked) return;
     if(bIsEditMode) return;
 
     APlayerCharacter* PlayerCharacter = Cast<APlayerCharacter>(GetPawn());
@@ -576,6 +585,7 @@ void AInvisiblePlayerController::OnCrouchToggle()
 // 奔跑开始
 void AInvisiblePlayerController::OnRunStarted()
 {
+    if (bGameplayInputLocked) return;
     if(bIsEditMode) return;
     if(bIsCrouching) return;
     
@@ -596,6 +606,7 @@ void AInvisiblePlayerController::OnRunStarted()
 // 奔跑状态结束
 void AInvisiblePlayerController::OnRunCompleted()
 {
+    if (bGameplayInputLocked) return;
     if(bIsEditMode) return;
 
     bIsRunning = false;
@@ -614,6 +625,7 @@ void AInvisiblePlayerController::OnRunCompleted()
 // 移动输入
 void AInvisiblePlayerController::OnEditPan(const FInputActionValue& Value)
 {
+    if (bGameplayInputLocked) return;
     if(!bIsEditMode) return;
     EditPanInput = Value.Get<FVector2D>();
 }
@@ -621,12 +633,15 @@ void AInvisiblePlayerController::OnEditPan(const FInputActionValue& Value)
 // 按键松开时清零输入
 void AInvisiblePlayerController::OnEditPanCompleted()
 {
+    if (bGameplayInputLocked) return;
+
     EditPanInput = FVector2D::ZeroVector;
 }
 
 // 旋转状态触发
 void AInvisiblePlayerController::OnEditRotateHoldStarted()
 {
+    if (bGameplayInputLocked) return;
     if(!bIsEditMode) return;
     bEditRotateHeld = true;
     
@@ -648,6 +663,7 @@ void AInvisiblePlayerController::OnEditRotateHoldStarted()
 // 旋转状态结束
 void AInvisiblePlayerController::OnEditRotateHoldCompleted()
 {
+    if (bGameplayInputLocked) return;
     if(!bIsEditMode) return;
     bEditRotateHeld = false;
 
@@ -659,6 +675,7 @@ void AInvisiblePlayerController::OnEditRotateHoldCompleted()
 // 旋转输入
 void AInvisiblePlayerController::OnEditRotate(const FInputActionValue& Value)
 {
+    if (bGameplayInputLocked) return;
     if(!bIsEditMode || !EditCamera) return;
     const float DeltaYaw = Value.Get<FVector2D>().X * EditCamera->CameraOrbitSpeed;
     EditCamera->OrbitCamera(DeltaYaw);
@@ -672,7 +689,7 @@ void AInvisiblePlayerController::OnEditSelect()
     // 旋转模式下屏蔽选择功能
     if(bEditRotateHeld) return;
 
-    
+    if (bGameplayInputLocked) return;
 
     FHitResult HitResult;
     if(GetHitResultUnderCursor(ECC_Pawn, false, HitResult))
@@ -707,6 +724,7 @@ void AInvisiblePlayerController::OnEditSelect()
 // 开始路径绘制
 void AInvisiblePlayerController::OnStartPathDrag()
 {
+    if (bGameplayInputLocked) return;
     if(!bIsEditMode || bEditRotateHeld) return;
     
     // 重置状态
@@ -812,6 +830,7 @@ void AInvisiblePlayerController::OnStartPathDrag()
 // 拖拽时更新路径预览
 void AInvisiblePlayerController::OnEditPathDragTriggered()
 {
+    if (bGameplayInputLocked) return;
     if(!bIsEditMode || !bPathDragActive || !DragPawn.IsValid()) return;
 
     // 如果鼠标位移没有超过阈值，则不认为是拖拽
@@ -941,6 +960,7 @@ void AInvisiblePlayerController::OnEditPathDragTriggered()
 // 拖拽结束，保留路径直到编辑模式关闭
 void AInvisiblePlayerController::OnEditPathDragCompleted()
 {
+    if (bGameplayInputLocked) return;
     if(!bIsEditMode) return;
 
     bPathDragActive = false;
@@ -1221,6 +1241,7 @@ bool AInvisiblePlayerController::ReClampPreviewPathByCurrentBudget(float MaxAllo
 // 删除当前选中的ai路径
 void AInvisiblePlayerController::OnRemoveSelectedAIPath()
 {
+    if (bGameplayInputLocked) return;
     if(!bIsEditMode) return;
 
     // 选中时才能删除
@@ -2281,4 +2302,52 @@ bool AInvisiblePlayerController::BuildExpectedInteractionPointForTargetHold(
     OutExpectedPoint = FVector(FallbackXY.X, FallbackXY.Y, SourceLoc.Z);
     return true;
     
+}
+
+
+// ===== 游戏结束功能 =====
+// 设置游戏输入锁定
+void AInvisiblePlayerController::SetGameplayInputLocked(bool bLocked)
+{
+    if (bGameplayInputLocked == bLocked)
+	{
+		return;
+	}
+
+    bGameplayInputLocked = bLocked;
+
+    SetIgnoreMoveInput(bLocked);
+    SetIgnoreLookInput(bLocked);
+
+    if(!bLocked)
+    {
+        return;
+    }
+
+    // 清除所有输入状态
+    bIsRunning = false;
+    bRotateHeld = false;
+	bEditRotateHeld = false;
+	EditPanInput = FVector2D::ZeroVector;
+
+    // 清理路径预览
+    bPathDragActive = false;
+	DragPawn.Reset();
+	bHasPreviewPath = false;
+	PreviewTarget = FVector::ZeroVector;
+	PreviewPathPoints.Reset();
+
+    ClearPreviewInteraction();
+
+    // 隐藏所有交互按钮
+    HideAllInteractionButtons();
+	HideAIInfoPanel();
+	StopEnergyRegen();
+
+    if (APlayerCharacter* PlayerCharacter = Cast<APlayerCharacter>(GetPawn()))
+	{
+		PlayerCharacter->bIsRunning = false;
+		PlayerCharacter->GetCharacterMovement()->MaxWalkSpeed = PlayerCharacter->NormalWalkSpeed;
+		PlayerCharacter->GetCharacterMovement()->StopMovementImmediately();
+	}
 }

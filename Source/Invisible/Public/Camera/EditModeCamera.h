@@ -9,6 +9,8 @@
 #include <GameFramework/SpringArmComponent.h>
 #include <Camera/CameraComponent.h>
 #include <Components/SceneComponent.h>
+#include "Components/DecalComponent.h"      
+#include "Materials/MaterialInterface.h"  
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "EditModeCamera.generated.h"
@@ -55,7 +57,15 @@ public:
 
 	// 鼠标投影指示器组件
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Components")
-	UStaticMeshComponent* GroundRingMesh;
+	UDecalComponent* GroundRingDecal;
+
+	// 指示器贴花材质（指示器的贴花效果）
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Indicator")
+	UMaterialInterface* GroundRingDecalMaterial = nullptr;
+
+	// Decal尺寸：X=投射厚度，Y/Z=范围
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Indicator")
+	FVector GroundRingDecalSize = FVector(32.0f, 96.0f, 96.0f);
 
 	// 生成时相机俯视角
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera")
