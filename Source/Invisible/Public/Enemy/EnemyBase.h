@@ -18,6 +18,7 @@
 class UMotionWarpingComponent;
 class UAIInteractionButtonsWidget;
 class UAIDialogueBubbleWidget;
+class UAnimSequence;
 
 // 敌人警戒配置结构体
 USTRUCT(BlueprintType)
@@ -332,6 +333,26 @@ public:
     // 互动时转向速度
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction", meta = (ClampMin = "0.0"))
     float InteractionTurnSpeed = 180.0f;
+
+    // 注入路径起步转身动画（单段：前半右转，后半左转）
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|InjectedPath|Turn")
+    UAnimSequence* InjectedPathTurnAnim = nullptr;
+
+    // 单段动画左右切分点（0~1，默认0.5）
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|InjectedPath|Turn", meta=(ClampMin="0.05", ClampMax="0.95", UIMin="0.05", UIMax="0.95"))
+    float InjectedPathTurnSplitNormalizedTime = 0.5f;
+
+    // 起步前触发转身的最小角度（度）
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|InjectedPath|Turn", meta=(ClampMin="0.0", UIMin="0.0", UIMax="180.0"))
+    float InjectedPathTurnMinAngle = 15.0f;
+
+    // 转身动画播放速率
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|InjectedPath|Turn", meta=(ClampMin="0.1", UIMin="0.1", UIMax="3.0"))
+    float InjectedPathTurnPlayRate = 1.0f;
+
+    // 转身阶段最大等待时长（秒），避免动画事件缺失导致卡住
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|InjectedPath|Turn", meta=(ClampMin="0.1", UIMin="0.1", UIMax="5.0"))
+    float InjectedPathTurnMaxWaitTime = 1.2f;
 
     // ===== 斗殴运动扭曲配置 =====
 

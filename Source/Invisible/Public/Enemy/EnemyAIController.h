@@ -13,6 +13,8 @@
 #include "EnemyAIController.generated.h"
 
 class APlayerCharacter;
+class UAnimSequence;
+class UAnimMontage;
 
 // 广播事件结束信息
 DECLARE_MULTICAST_DELEGATE_FourParams(
@@ -94,6 +96,18 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction")
     bool bInterruptInteractionOnChase = true;
 
+    // 睡觉行为 Tag（用于识别“关闭感知”的特殊互动）
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction|Object", meta=(Categories="Behavior.AI"))
+    FGameplayTag SleepActionTag;
+
+    // 坐下行为 Tag（用于识别“抑制兴趣转向”的特殊互动）
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction|Object", meta=(Categories="Behavior.AI"))
+    FGameplayTag SitActionTag;
+
+    // 可选：物体交互锚点组件名称（若存在则优先作为瞬移目标点）
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction|Object")
+    FName ObjectInteractionAnchorComponentName = TEXT("AIInteractionAnchor");
+
     // 中断当前待执行互动
     void InterruptPendingInteractionForAlert();
 
@@ -123,6 +137,12 @@ private:
     // ===== 交互相关参数 =====
     // 互动时转向速度（从 EnemyBase 获取）
     float InteractionTurnSpeed = 360.0f;
+
+    // 睡觉期间：关闭视觉/听觉处理与兴趣状态写入
+    bool bInteractionDisableAllSenses = false;
+
+    // 坐下期间：警戒值达到打探阈值前，抑制兴趣状态激活
+    bool bInteractionSuppressInterestUntilChase = false;
 
     // 互动时转向计时器
     FTimerHandle InteractionFacingTimerHandle;
@@ -155,6 +175,21 @@ private:
 
     // 处理应用状态互动锁
     void ApplyInteractionStateLock(AEnemyBase* SelfEnemy, AActor* TargetActor, const FGameplayTag& ActionTag, bool bIsChatLike);
+
+    // 是否为睡觉行为
+    bool IsSleepInteraction(const FGameplayTag& ActionTag) const;
+
+    // 是否为坐下行为
+    bool IsSitInteraction(const FGameplayTag& ActionTag) const;
+
+    // 根据行为设置特殊运行态锁（睡觉/坐下）
+    void ApplySpecialObjectInteractionRuntimeFlags(AEnemyBase* SelfEnemy, const FGameplayTag& ActionTag);
+
+    // 清理特殊运行态锁
+    void ClearSpecialObjectInteractionRuntimeFlags();
+
+    // 睡觉/坐下时将AI瞬移到物体交互点（锚点优先）
+    void SnapToObjectInteractionAnchor(AEnemyBase* SelfEnemy, AActor* TargetActor, const FGameplayTag& ActionTag) const;
 
 
     // 上下文检验（用于校验当前代码是否存在问题）
@@ -254,14 +289,44 @@ private:
     // 开始插入路径
     void StartInjectedPath();
 
+    // 执行注入路径起步预转身（完成后再走首点）
+    void BeginInjectedPathTurnThenMove();
+
     // 移动到插入路径点
     void MoveToInjectedPoint(int32 PointIndex);
+
+    // 结束预转身并开始首段移动
+    void FinishInjectedPathTurnAndMove();
+
+    // 取消预转身运行态
+    void ResetInjectedPathTurnState();
+
+    // 播放起步转身动画（按左右半段播放）
+    float PlayInjectedPathTurnAnimation(AEnemyBase* SelfEnemy, float DeltaYaw);
+
+    // 是否需要起步转身
+    bool ShouldPlayInjectedPathTurn(AEnemyBase* SelfEnemy, const FVector& Goal, float& OutDeltaYaw) const;
 
     // 完成插入路径并恢复巡逻
     void FinishInjectedPathAndResumePatrol();
 
     // 插入路径完成回调
     void HandleInjectedPathMoveFinished(FAIRequestID RequestID, const FPathFollowingResult& Result);
+
+    // =====注入路径起步预转身=====
+    bool bInjectedPathTurnInProgress = false;
+    FVector InjectedPathFirstGoal = FVector::ZeroVector;
+    FRotator InjectedPathSavedRotationRate = FRotator(0.f, 180.f, 0.f);
+    bool bInjectedPathSavedOrientRotationToMovement = true;
+    float InjectedPathTurnMinAngle = 15.0f;
+    float InjectedPathTurnPlayRate = 1.0f;
+    float InjectedPathTurnSplitNormalizedTime = 0.5f;
+    float InjectedPathTurnMaxWaitTime = 1.2f;
+    UPROPERTY()
+    UAnimSequence* InjectedPathTurnAnim = nullptr;
+    UPROPERTY(Transient)
+    UAnimMontage* InjectedPathTurnDynamicMontage = nullptr;
+    FTimerHandle InjectedPathTurnTimerHandle;
 
     // =====编辑模式互动执行（ai行为执行）=====
 
@@ -442,6 +507,18 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction")
     bool bEnableInteractionDialogueBubble = true;
 
+    // 是否启用对话自动刷新（默认关闭，避免影响现有行为）
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction|Dialogue")
+    bool bEnableDialogueAutoRefresh = false;
+
+    // 对话首次刷新延时（秒）
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction|Dialogue", meta=(ClampMin="0.0"))
+    float DialogueStartDelay = 0.0f;
+
+    // 对话刷新间隔（秒）
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction|Dialogue", meta=(ClampMin="0.1"))
+    float DialogueRefreshInterval = 1.5f;
+
     // 是否启用交谈双方错峰显示
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction|Dialogue")
     bool bEnableStaggeredChatBubble = true;
@@ -460,7 +537,8 @@ private:
         AEnemyBase* SelfEnemy,
         AActor* TargetActor,
         const FGameplayTag& ActionTag,
-        bool bIsChatLike
+        bool bIsChatLike,
+        bool bUseDelay = true
     );
 
     // 隐藏头顶文本（在互动结束或中断时隐藏）
@@ -472,12 +550,25 @@ private:
     // 源/目标延迟显示计时器
     FTimerHandle SourceBubbleDelayTimerHandle;
     FTimerHandle TargetBubbleDelayTimerHandle;
+    // 对话自动刷新计时器
+    FTimerHandle DialogueRefreshTimerHandle;
 
     // 对话延迟显示
     void ScheduleDialogueBubble(AEnemyBase* InEnemy, const FText& InLine, float InDelay, FTimerHandle& InHandle);
 
     // 清除延迟显示计时器
     void ClearDialogueBubbleDelayTimers();
+    // 开启对话自动刷新
+    void StartDialogueRefreshLoop(AEnemyBase* SelfEnemy, AActor* TargetActor, const FGameplayTag& ActionTag, bool bIsChatLike);
+    // 停止对话自动刷新
+    void StopDialogueRefreshLoop();
+
+
+// ===== 游戏结束 =====
+public:
+    // 进入游戏结束开火状态
+    UFUNCTION(BlueprintCallable, Category="AI|GameOver")
+    void EnterGameOverFire(AActor* TargetActor);
 
 
 // ===== 状态机 =====
