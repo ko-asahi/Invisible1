@@ -8,10 +8,12 @@
 #include "Kismet/GameplayStatics.h"
 #include "Player/PlayerCharacter.h"
 #include "InvisiblePlayerController.h"
+#include "InvisiblePlayerState.h"
 
 AInvisible_GameModeBase::AInvisible_GameModeBase()
 {
     DefaultPawnClass = APlayerCharacter::StaticClass();
+    PlayerStateClass = AInvisiblePlayerState::StaticClass();
 }
 
 void AInvisible_GameModeBase::BeginPlay()

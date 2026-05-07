@@ -9,8 +9,8 @@
 #include <GameFramework/SpringArmComponent.h>
 #include <Camera/CameraComponent.h>
 #include <Components/SceneComponent.h>
-#include "Components/DecalComponent.h"      
-#include "Materials/MaterialInterface.h"  
+#include "NiagaraComponent.h"
+#include "NiagaraSystem.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "EditModeCamera.generated.h"
@@ -55,17 +55,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Components")
 	UCameraComponent* Camera;
 
-	// 鼠标投影指示器组件
+	// 鼠标地面指示器 Niagara 组件
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Components")
-	UDecalComponent* GroundRingDecal;
+	UNiagaraComponent* GroundRingNiagara;
 
-	// 指示器贴花材质（指示器的贴花效果）
+	// 地面指示器 Niagara 系统
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Indicator")
-	UMaterialInterface* GroundRingDecalMaterial = nullptr;
-
-	// Decal尺寸：X=投射厚度，Y/Z=范围
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Indicator")
-	FVector GroundRingDecalSize = FVector(32.0f, 96.0f, 96.0f);
+	UNiagaraSystem* GroundRingNiagaraSystem = nullptr;
 
 	// 生成时相机俯视角
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera")

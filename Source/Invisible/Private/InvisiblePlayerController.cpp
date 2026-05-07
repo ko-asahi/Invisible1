@@ -24,6 +24,12 @@ void AInvisiblePlayerController::BeginPlay()
 {
     Super::BeginPlay();
 
+    bGameplayInputLocked = false;
+    ResetIgnoreMoveInput();
+    ResetIgnoreLookInput();
+    SetInputMode(FInputModeGameOnly());
+    bShowMouseCursor = false;
+
     UpdateInputContext();
 
     // 初始化当前能量
@@ -40,6 +46,20 @@ void AInvisiblePlayerController::BeginPlay()
             AIInfoPanelInstance->AddToViewport(10);
             AIInfoPanelInstance->SetVisibility(ESlateVisibility::Hidden);
         }
+    }
+
+    // Tag 回退：若蓝图中未配置，自动尝试使用项目内已知默认值（false = 不存在时不报错）
+    if (!IrritableTraitTag.IsValid())
+    {
+        IrritableTraitTag = FGameplayTag::RequestGameplayTag(TEXT("Trait.AI.Personality.Irritable"), false);
+    }
+    if (!ChatBehaviorRootTag.IsValid())
+    {
+        ChatBehaviorRootTag = FGameplayTag::RequestGameplayTag(TEXT("Behavior.AI.Interact.Talk"), false);
+    }
+    if (!BrawlBehaviorTag.IsValid())
+    {
+        BrawlBehaviorTag = FGameplayTag::RequestGameplayTag(TEXT("Behavior.AI.Interact.Brawl"), false);
     }
 
     // 注册ai交互委托
@@ -1043,6 +1063,8 @@ void AInvisiblePlayerController::OnEditPathDragCompleted()
         NewPath.ConfirmedActionCost = 0.0f;
         NewPath.ConfirmedExecutionRadius = 0.0f;
         NewPath.ConfirmedDuration = 0.0f;
+        NewPath.bBrawlEnergyDrained = false;
+        NewPath.BrawlDrainedEnergy = 0.0f;
         LockedAIPaths.Add(MoveTemp(NewPath));
 
         AEnemyBase* SourceEnemy = Cast<AEnemyBase>(DragPawn.Get());
@@ -1092,6 +1114,8 @@ void AInvisiblePlayerController::OnEditPathDragCompleted()
         LockedAIPaths[Index].ConfirmedActionCost = 0.0f;
         LockedAIPaths[Index].ConfirmedExecutionRadius = 0.0f;
         LockedAIPaths[Index].ConfirmedDuration = 0.0f;
+        LockedAIPaths[Index].bBrawlEnergyDrained = false;
+        LockedAIPaths[Index].BrawlDrainedEnergy = 0.0f;
 
         // 隐藏所有ai头顶交互按钮
         HideAllInteractionButtons();
@@ -1264,6 +1288,12 @@ void AInvisiblePlayerController::OnRemoveSelectedAIPath()
             if (Item.bActionConfirmed)
             {
                 Refund += FMath::Max(0.f, Item.ConfirmedActionCost);
+            }
+
+            // 斗殴触发时被清空的剩余能量，删除该路径时一并返还
+            if (Item.bBrawlEnergyDrained)
+            {
+                Refund += FMath::Max(0.f, Item.BrawlDrainedEnergy);
             }
         }
     }
@@ -1633,6 +1663,7 @@ bool AInvisiblePlayerController::BuildInteractionCandidates(AEnemyBase* SourceAI
     // UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] 解析 SourceEnemy 的特质，并将ai与ai的特质写入输出数组 TraitDefs=%d"), TraitDefs.Num());
 
     TSet<FGameplayTag> UniqueActionTags;
+    bool bReachedMaxButtons = false;
 
     for(const UTraitDefinition* Def : TraitDefs)
     {
@@ -1692,10 +1723,37 @@ bool AInvisiblePlayerController::BuildInteractionCandidates(AEnemyBase* SourceAI
 
             if(OutActions.Num() >= FMath::Clamp(MaxInteractionButtons, 1, 5))
             {
-                return true;
+                bReachedMaxButtons = true;
+                break;
             }
         }
+
+        if (bReachedMaxButtons)
+        {
+            break;
+        }
     }
+
+    // 共享“聊天入口”时，易怒特质不直接展示“斗殴”按钮，避免出现两个按钮。
+    if (bEnableIrritableChatToBrawl
+        && IrritableTraitTag.IsValid()
+        && ChatBehaviorRootTag.IsValid()
+        && SourceAI->TraitTags.HasTag(IrritableTraitTag))
+    {
+        const bool bHasChatEntry = OutActions.ContainsByPredicate([this](const FInteractionActionOption& Option)
+        {
+            return IsChatEntryAction(Option.Spec.ActionTag);
+        });
+
+        if (bHasChatEntry)
+        {
+            OutActions.RemoveAll([this](const FInteractionActionOption& Option)
+            {
+                return !IsChatEntryAction(Option.Spec.ActionTag);
+            });
+        }
+    }
+
     // UE_LOG(LogAIInteractionDebug, Log, TEXT("[构建预览交互] 退出 OutActions=%d"), OutActions.Num());
     return OutActions.Num() > 0;
 }
@@ -1776,13 +1834,32 @@ void AInvisiblePlayerController::OnInteractionActionChosen(
     }
 
     CurrentPathEnergy = FMath::Clamp(CurrentPathEnergy - DeltaCost, 0.0f, MaxPathEnergy);
-    DisplayPathEnergy = CurrentPathEnergy;
 
     Path.bActionConfirmed = true;
     Path.ConfirmedActionTag = FinalOption.Spec.ActionTag;
     Path.ConfirmedActionCost = NewCost;
     Path.ConfirmedExecutionRadius = FMath::Max(0.0f, FinalOption.Spec.ExecutionRadius);
     Path.ConfirmedDuration = FMath::Max(0.0f, FinalOption.Spec.Duration);
+
+    // 最终行为为斗殴（含“聊天->概率转斗殴”）时，清空剩余能量并记录被清空量
+    if (IsBrawlAction(FinalOption.Spec.ActionTag))
+    {
+        const float DrainedEnergy = FMath::Max(0.0f, CurrentPathEnergy);
+        CurrentPathEnergy = 0.0f;
+        Path.bBrawlEnergyDrained = true;
+        Path.BrawlDrainedEnergy = DrainedEnergy;
+    }
+    else
+    {
+        // 同一路径若从斗殴改为非斗殴，立即回退历史清空量，避免能量丢失
+        if (Path.bBrawlEnergyDrained && Path.BrawlDrainedEnergy > 0.0f)
+        {
+            CurrentPathEnergy = FMath::Clamp(CurrentPathEnergy + Path.BrawlDrainedEnergy, 0.0f, MaxPathEnergy);
+        }
+        Path.bBrawlEnergyDrained = false;
+        Path.BrawlDrainedEnergy = 0.0f;
+    }
+    DisplayPathEnergy = CurrentPathEnergy;
 
     // 只有确认成功后才创建 Pair 锁
     if (bShouldCreatePairLock)
@@ -1861,6 +1938,12 @@ int32 AInvisiblePlayerController::FindLockedInteractionPathIndex(const AEnemyBas
 bool AInvisiblePlayerController::IsChatEntryAction(const FGameplayTag& ActionTag) const
 {
     return ChatBehaviorRootTag.IsValid() && ActionTag.IsValid() && ActionTag.MatchesTag(ChatBehaviorRootTag);
+}
+
+// 判断是否为斗殴类行为
+bool AInvisiblePlayerController::IsBrawlAction(const FGameplayTag& ActionTag) const
+{
+    return BrawlBehaviorTag.IsValid() && ActionTag.IsValid() && ActionTag.MatchesTag(BrawlBehaviorTag);
 }
 
 
@@ -2030,7 +2113,7 @@ bool AInvisiblePlayerController::TryOverrideChatOptionToBrawl(
         return false;
     }
 
-    if (!SourceAI->TraitTags.HasTagExact(IrritableTraitTag))
+    if (!SourceAI->TraitTags.HasTag(IrritableTraitTag))
     {
         return false;
     }
@@ -2167,10 +2250,8 @@ void AInvisiblePlayerController::HandleInteractionResolvedFromAI(
         return;
     }
     
-    // 结束或中断时解锁
-    // if (EndReason == EInteractionEndReason::Completed || EndReason == EInteractionEndReason::Interrupted)
-    // 结束时解锁
-    if (EndReason == EInteractionEndReason::Completed)
+    // 完成或中断时均解锁，避免中断后残留旧锁导致下次无法重新决策
+    if (EndReason == EInteractionEndReason::Completed || EndReason == EInteractionEndReason::Interrupted)
     {
         ClearPairDecisionLock(SourceActor, TargetActor);
     }
@@ -2311,13 +2392,26 @@ void AInvisiblePlayerController::SetGameplayInputLocked(bool bLocked)
 {
     if (bGameplayInputLocked == bLocked)
 	{
+        if (!bLocked)
+        {
+            ResetIgnoreMoveInput();
+            ResetIgnoreLookInput();
+        }
 		return;
 	}
 
     bGameplayInputLocked = bLocked;
 
-    SetIgnoreMoveInput(bLocked);
-    SetIgnoreLookInput(bLocked);
+    if (bLocked)
+    {
+        SetIgnoreMoveInput(true);
+        SetIgnoreLookInput(true);
+    }
+    else
+    {
+        ResetIgnoreMoveInput();
+        ResetIgnoreLookInput();
+    }
 
     if(!bLocked)
     {

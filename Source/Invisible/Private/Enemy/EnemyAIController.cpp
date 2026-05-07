@@ -18,6 +18,10 @@
 #include "Enemy/Interaction/AIBehaviorDialogueSubsystem.h"
 #include "Engine/GameInstance.h"
 #include "Invisible_GameModeBase.h"
+#include "Components/SceneComponent.h"
+#include "Animation/AnimSequence.h"
+#include "Animation/AnimMontage.h"
+#include "Animation/AnimInstance.h"
 
 // Blackboard 键名定义
 const FName AEnemyAIController::BB_TargetActor      = TEXT("TargetActor");
@@ -73,6 +77,14 @@ void AEnemyAIController::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
 
+    if (bInjectedPathTurnInProgress)
+    {
+        if (AEnemyBase* SelfEnemy = Cast<AEnemyBase>(GetPawn()))
+        {
+            RotateActorToward(SelfEnemy, InjectedPathFirstGoal, DeltaSeconds);
+        }
+    }
+
     // 等待阶段：目标AI原地持续朝向“预计互动点”
     if (bExternalApproachHold)
     {
@@ -112,8 +124,23 @@ void AEnemyAIController::OnPossess(APawn* InPawn)
     AEnemyBase* Enemy = Cast<AEnemyBase>(InPawn);
     if(!Enemy) return;
 
+    // Tag 回退：若蓝图中未配置，自动尝试项目默认值（false=缺失时不报错）
+    if (!SleepActionTag.IsValid())
+    {
+        SleepActionTag = FGameplayTag::RequestGameplayTag(FName("Behavior.AI.Interact.Sleep"), false);
+    }
+    if (!SitActionTag.IsValid())
+    {
+        SitActionTag = FGameplayTag::RequestGameplayTag(FName("Behavior.AI.Interact.Sit"), false);
+    }
+
     // 获取互动时转向速度
     InteractionTurnSpeed = FMath::Max(Enemy->InteractionTurnSpeed, 0.0f);
+    InjectedPathTurnAnim = Enemy->InjectedPathTurnAnim;
+    InjectedPathTurnSplitNormalizedTime = FMath::Clamp(Enemy->InjectedPathTurnSplitNormalizedTime, 0.05f, 0.95f);
+    InjectedPathTurnMinAngle = FMath::Max(Enemy->InjectedPathTurnMinAngle, 0.0f);
+    InjectedPathTurnPlayRate = FMath::Max(Enemy->InjectedPathTurnPlayRate, 0.1f);
+    InjectedPathTurnMaxWaitTime = FMath::Max(Enemy->InjectedPathTurnMaxWaitTime, 0.1f);
 
     // 从敌人类获取感知参数
     SightRadius = Enemy->SightRadius;
@@ -213,6 +240,11 @@ void AEnemyAIController::OnUnPossess()
     GetWorldTimerManager().ClearTimer(DetectionTimerHandle);
     GetWorldTimerManager().ClearTimer(PendingInteractionTimerHandle);
     GetWorldTimerManager().ClearTimer(InteractionFacingTimerHandle);
+    GetWorldTimerManager().ClearTimer(InjectedPathTurnTimerHandle);
+    ResetInjectedPathTurnState();
+    StopDialogueRefreshLoop();
+    ClearDialogueBubbleDelayTimers();
+    ClearSpecialObjectInteractionRuntimeFlags();
     Super::OnUnPossess();
 }
 
@@ -260,6 +292,8 @@ void AEnemyAIController::SetAIPaused(bool bPaused)
     {
         StopMovement();
         GetWorldTimerManager().ClearTimer(DetectionTimerHandle);
+        GetWorldTimerManager().ClearTimer(InjectedPathTurnTimerHandle);
+        ResetInjectedPathTurnState();
 
         if(UBrainComponent* Brain = GetBrainComponent())
         {
@@ -364,6 +398,18 @@ void AEnemyAIController::TickDetection()
     UBlackboardComponent* BB = GetBlackboardComponent();
     if (!BB) return;
 
+    if (bInteractionDisableAllSenses)
+    {
+        BB->SetValueAsFloat(BB_Alertness, Alertness);
+        BB->SetValueAsBool(BB_HasVisualContact, false);
+        BB->SetValueAsBool(BB_IsSuspicious, false);
+        BB->SetValueAsBool(BB_IsChasing, false);
+        BB->SetValueAsBool(BB_HasInterest, false);
+        BB->SetValueAsBool(BB_IsInvestigating, false);
+        BB->ClearValue(BB_VisualTargetActor);
+        return;
+    }
+
     const float NowTime = GetWorld()->GetTimeSeconds();
     const float Dt = FMath::Max(DetectionInterval, KINDA_SMALL_NUMBER);
 
@@ -430,7 +476,14 @@ void AEnemyAIController::TickDetection()
     // ===== 兴趣状态激活（视觉/听觉统一入口） =====
     // 仅当 HasInterest 从 false 变 true 时触发，确保所有任务阶段均可被打断
     const bool bPrevHasInterest = BB->GetValueAsBool(BB_HasInterest);
-    if (bHasAnyStimulus && !bPrevHasInterest)
+    if (bChasing && bInteractionSuppressInterestUntilChase)
+    {
+        bInteractionSuppressInterestUntilChase = false;
+        UE_LOG(LogTemp, Log, TEXT("[AI] 坐下互动已达到打探阈值，解除兴趣抑制"));
+    }
+
+    const bool bSuppressInterestForSit = bInteractionSuppressInterestUntilChase && !bChasing;
+    if (bHasAnyStimulus && !bPrevHasInterest && !bSuppressInterestForSit)
     {
         FVector InterestLoc = FVector::ZeroVector;
         if (bInSight && Player)
@@ -628,6 +681,11 @@ bool AEnemyAIController::IsPlayerInFanSight(float& OutDistance) const
 // 提前触发 TickDetection 以实现即时响应（不等待下一个 0.1s 周期）
 void AEnemyAIController::OnTargetPerceptionUpdated(AActor* Actor, FAIStimulus Stimulus)
 {
+    if (bInteractionDisableAllSenses)
+    {
+        return;
+    }
+
     if (Stimulus.Type != UAISense::GetSenseID<UAISense_Hearing>()) return;
     if (!Stimulus.WasSuccessfullySensed()) return;
 
@@ -724,6 +782,178 @@ void AEnemyAIController::StartInjectedPath()
 
     // PathPoints[0]通常是当前点，从1开始移动
     InjectedPathIndex = 1;
+    BeginInjectedPathTurnThenMove();
+}
+
+bool AEnemyAIController::ShouldPlayInjectedPathTurn(AEnemyBase* SelfEnemy, const FVector& Goal, float& OutDeltaYaw) const
+{
+    OutDeltaYaw = 0.0f;
+    if (!SelfEnemy)
+    {
+        return false;
+    }
+
+    const FVector ToGoal = (Goal - SelfEnemy->GetActorLocation()).GetSafeNormal2D();
+    if (ToGoal.IsNearlyZero())
+    {
+        return false;
+    }
+
+    const float TargetYaw = ToGoal.Rotation().Yaw;
+    OutDeltaYaw = FMath::FindDeltaAngleDegrees(SelfEnemy->GetActorRotation().Yaw, TargetYaw);
+    return FMath::Abs(OutDeltaYaw) >= InjectedPathTurnMinAngle;
+}
+
+float AEnemyAIController::PlayInjectedPathTurnAnimation(AEnemyBase* SelfEnemy, float DeltaYaw)
+{
+    if (!SelfEnemy || !InjectedPathTurnAnim)
+    {
+        return 0.0f;
+    }
+
+    USkeletalMeshComponent* MeshComp = SelfEnemy->GetMesh();
+    if (!MeshComp)
+    {
+        return 0.0f;
+    }
+
+    UAnimInstance* AnimInstance = MeshComp->GetAnimInstance();
+    if (!AnimInstance)
+    {
+        return 0.0f;
+    }
+
+    UAnimMontage* DynamicMontage = UAnimMontage::CreateSlotAnimationAsDynamicMontage(
+        InjectedPathTurnAnim,
+        FName(TEXT("DefaultSlot")),
+        0.1f,
+        0.1f,
+        InjectedPathTurnPlayRate,
+        1);
+
+    if (!DynamicMontage)
+    {
+        return 0.0f;
+    }
+
+    InjectedPathTurnDynamicMontage = DynamicMontage;
+
+    const float ClipLength = FMath::Max(InjectedPathTurnAnim->GetPlayLength(), KINDA_SMALL_NUMBER);
+    const float SplitTime = FMath::Clamp(InjectedPathTurnSplitNormalizedTime, 0.05f, 0.95f) * ClipLength;
+    // UE中 FindDeltaAngleDegrees 正值通常代表向左转，这里按“右转=前半段”映射为负值。
+    const bool bTurnRight = DeltaYaw < 0.0f;
+    const float StartTime = bTurnRight ? 0.0f : SplitTime;
+    const float SegmentLength = bTurnRight ? SplitTime : (ClipLength - SplitTime);
+    const float SafeSegmentLength = FMath::Max(SegmentLength / FMath::Max(InjectedPathTurnPlayRate, KINDA_SMALL_NUMBER), 0.05f);
+
+    const float PlayedLen = AnimInstance->Montage_Play(DynamicMontage, InjectedPathTurnPlayRate, EMontagePlayReturnType::MontageLength, StartTime);
+    if (PlayedLen <= 0.0f)
+    {
+        InjectedPathTurnDynamicMontage = nullptr;
+        return 0.0f;
+    }
+
+    return SafeSegmentLength;
+}
+
+void AEnemyAIController::ResetInjectedPathTurnState()
+{
+    bInjectedPathTurnInProgress = false;
+    InjectedPathFirstGoal = FVector::ZeroVector;
+    InjectedPathTurnDynamicMontage = nullptr;
+
+    if (AEnemyBase* SelfEnemy = Cast<AEnemyBase>(GetPawn()))
+    {
+        if (UCharacterMovementComponent* MoveComp = SelfEnemy->GetCharacterMovement())
+        {
+            MoveComp->bOrientRotationToMovement = bInjectedPathSavedOrientRotationToMovement;
+            MoveComp->RotationRate = InjectedPathSavedRotationRate;
+        }
+    }
+}
+
+void AEnemyAIController::BeginInjectedPathTurnThenMove()
+{
+    if (!InjectedPathPoints.IsValidIndex(InjectedPathIndex))
+    {
+        FinishInjectedPathAndResumePatrol();
+        return;
+    }
+
+    AEnemyBase* SelfEnemy = Cast<AEnemyBase>(GetPawn());
+    if (!SelfEnemy)
+    {
+        MoveToInjectedPoint(InjectedPathIndex);
+        return;
+    }
+
+    InjectedPathFirstGoal = InjectedPathPoints[InjectedPathIndex];
+
+    float DeltaYaw = 0.0f;
+    if (!ShouldPlayInjectedPathTurn(SelfEnemy, InjectedPathFirstGoal, DeltaYaw))
+    {
+        MoveToInjectedPoint(InjectedPathIndex);
+        return;
+    }
+
+    UCharacterMovementComponent* MoveComp = SelfEnemy->GetCharacterMovement();
+    if (!MoveComp)
+    {
+        MoveToInjectedPoint(InjectedPathIndex);
+        return;
+    }
+
+    bInjectedPathSavedOrientRotationToMovement = MoveComp->bOrientRotationToMovement;
+    InjectedPathSavedRotationRate = MoveComp->RotationRate;
+    MoveComp->bOrientRotationToMovement = false;
+    MoveComp->RotationRate = FRotator(0.f, FMath::Max(InteractionTurnSpeed, 0.0f), 0.f);
+
+    StopMovement();
+    MoveComp->StopMovementImmediately();
+
+    bInjectedPathTurnInProgress = true;
+
+    const float PlayedDuration = PlayInjectedPathTurnAnimation(SelfEnemy, DeltaYaw);
+    const float RotateDuration = FMath::Abs(DeltaYaw) / FMath::Max(InteractionTurnSpeed, 1.0f);
+    float WaitDuration = FMath::Max(PlayedDuration, RotateDuration);
+    if (PlayedDuration <= 0.0f)
+    {
+        WaitDuration = RotateDuration;
+    }
+    WaitDuration = FMath::Clamp(WaitDuration, 0.05f, InjectedPathTurnMaxWaitTime);
+
+    GetWorldTimerManager().ClearTimer(InjectedPathTurnTimerHandle);
+    GetWorldTimerManager().SetTimer(
+        InjectedPathTurnTimerHandle,
+        this,
+        &AEnemyAIController::FinishInjectedPathTurnAndMove,
+        WaitDuration,
+        false);
+}
+
+void AEnemyAIController::FinishInjectedPathTurnAndMove()
+{
+    GetWorldTimerManager().ClearTimer(InjectedPathTurnTimerHandle);
+
+    AEnemyBase* SelfEnemy = Cast<AEnemyBase>(GetPawn());
+    if (SelfEnemy)
+    {
+        if (InjectedPathTurnDynamicMontage && SelfEnemy->GetMesh())
+        {
+            if (UAnimInstance* AnimInstance = SelfEnemy->GetMesh()->GetAnimInstance())
+            {
+                AnimInstance->Montage_Stop(0.05f, InjectedPathTurnDynamicMontage);
+            }
+        }
+
+        const FVector ToGoal = (InjectedPathFirstGoal - SelfEnemy->GetActorLocation()).GetSafeNormal2D();
+        if (!ToGoal.IsNearlyZero())
+        {
+            SelfEnemy->SetActorRotation(ToGoal.Rotation());
+        }
+    }
+
+    ResetInjectedPathTurnState();
     MoveToInjectedPoint(InjectedPathIndex);
 }
 
@@ -780,6 +1010,9 @@ void AEnemyAIController::HandleInjectedPathMoveFinished(FAIRequestID RequestID, 
 // 完成插入路径并恢复巡逻
 void AEnemyAIController::FinishInjectedPathAndResumePatrol()
 {
+    GetWorldTimerManager().ClearTimer(InjectedPathTurnTimerHandle);
+    ResetInjectedPathTurnState();
+
     if (UPathFollowingComponent* PathComp = GetPathFollowingComponent())
     {
         if (InjectedPathFinishedHandle.IsValid())
@@ -877,6 +1110,8 @@ void AEnemyAIController::ClearPendingInteraction()
 
     GetWorldTimerManager().ClearTimer(PendingInteractionTimerHandle);
     GetWorldTimerManager().ClearTimer(InteractionFacingTimerHandle);
+    StopDialogueRefreshLoop();
+    ClearDialogueBubbleDelayTimers();
 
     // 清理待执行互动完成回调
     if(UPathFollowingComponent* PathComp = GetPathFollowingComponent())
@@ -889,6 +1124,7 @@ void AEnemyAIController::ClearPendingInteraction()
     }
 
     SetForcedInteractionStateTag(false, FGameplayTag());
+    ClearSpecialObjectInteractionRuntimeFlags();
 
     // 释放目标等待锁，防止未开始互动就卡住
     if (TargetCtrlToRelease)
@@ -1064,6 +1300,9 @@ void AEnemyAIController::BeginPendingInteractionLoop()
     }
     const bool bIsChatLike = IsChatLikeInteraction(ActionTag);
 
+    SnapToObjectInteractionAnchor(SelfEnemy, TargetActor, ActionTag);
+    ApplySpecialObjectInteractionRuntimeFlags(SelfEnemy, ActionTag);
+
     // 互动期间停止移动，但不关闭检测
     StopMovement();
 
@@ -1076,6 +1315,11 @@ void AEnemyAIController::BeginPendingInteractionLoop()
 
     // 互动开始时尝试显示头顶文本
     TryShowInteractionDialogueBubble(SelfEnemy, TargetActor, ActionTag, bIsChatLike);
+    // 可选：启用对话自动刷新（默认关闭，不影响原有逻辑）
+    if (bEnableDialogueAutoRefresh)
+    {
+        StartDialogueRefreshLoop(SelfEnemy, TargetActor, ActionTag, bIsChatLike);
+    }
 
     // // 源ai 切为互动Tag
     // if(PendingInteractionContext.Spec.ActionTag.IsValid())
@@ -1162,6 +1406,8 @@ void AEnemyAIController::FinishPendingInteraction()
 
     // 释放自身（源AI）锁，清理上下文
     SetForcedInteractionStateTag(false, FGameplayTag());
+    ClearSpecialObjectInteractionRuntimeFlags();
+    StopDialogueRefreshLoop();
     ClearPendingInteraction();
     GetWorldTimerManager().ClearTimer(InteractionFacingTimerHandle);
 
@@ -1229,6 +1475,8 @@ void AEnemyAIController::InterruptPendingInteractionForAlert()
 
     // 释放自身（源AI）锁，清理上下文
     SetForcedInteractionStateTag(false, FGameplayTag());
+    ClearSpecialObjectInteractionRuntimeFlags();
+    StopDialogueRefreshLoop();
     // 清理互动运行态（会把 bIsRunningPendingInteraction 置 false）
     ClearPendingInteraction();
 
@@ -1314,6 +1562,9 @@ void AEnemyAIController::TickInteractionFacing()
 // 目标朝向A走到的预估位置
 void AEnemyAIController::SetExternalApproachHoldByLocation(const FVector& InFaceLocation)
 {
+    GetWorldTimerManager().ClearTimer(InjectedPathTurnTimerHandle);
+    ResetInjectedPathTurnState();
+
     bExternalApproachHold = true;
     bExternalHoldUseFaceLocation = true;
     ExternalHoldFaceLocation = InFaceLocation;
@@ -1340,6 +1591,9 @@ void AEnemyAIController::SetExternalApproachHoldByLocation(const FVector& InFace
 // 目标朝向最终修正到A走到的位置
 void AEnemyAIController::SetExternalApproachHoldByActor(AActor* InFaceActor)
 {
+    GetWorldTimerManager().ClearTimer(InjectedPathTurnTimerHandle);
+    ResetInjectedPathTurnState();
+
     bExternalApproachHold = true;
     bExternalHoldUseFaceLocation = false;
     ExternalHoldFaceActor = InFaceActor;
@@ -1386,13 +1640,107 @@ bool AEnemyAIController::IsChatLikeInteraction(const FGameplayTag& ActionTag) co
         return false;
     }
 
-    static const FGameplayTag ChatBehaviorRootTag = FGameplayTag::RequestGameplayTag(FName("Behavior.AI.Social.Chat"), false);
+    static const FGameplayTag ChatBehaviorRootTag = FGameplayTag::RequestGameplayTag(FName("Behavior.AI.Interact.Talk"), false);
 
     if(!ChatBehaviorRootTag.IsValid())
     {
         return false;
     }
     return ActionTag.MatchesTag(ChatBehaviorRootTag);
+}
+
+bool AEnemyAIController::IsSleepInteraction(const FGameplayTag& ActionTag) const
+{
+    return SleepActionTag.IsValid() && ActionTag.IsValid() && ActionTag.MatchesTag(SleepActionTag);
+}
+
+bool AEnemyAIController::IsSitInteraction(const FGameplayTag& ActionTag) const
+{
+    return SitActionTag.IsValid() && ActionTag.IsValid() && ActionTag.MatchesTag(SitActionTag);
+}
+
+void AEnemyAIController::ApplySpecialObjectInteractionRuntimeFlags(AEnemyBase* SelfEnemy, const FGameplayTag& ActionTag)
+{
+    bInteractionDisableAllSenses = false;
+    bInteractionSuppressInterestUntilChase = false;
+
+    if (!SelfEnemy || !ActionTag.IsValid())
+    {
+        return;
+    }
+
+    if (IsSleepInteraction(ActionTag))
+    {
+        bInteractionDisableAllSenses = true;
+        Alertness = 0.0f;
+        bHasHeardStimulus = false;
+        LastHeardLocation = FVector::ZeroVector;
+        LastHeardGameTime = -1.0f;
+    }
+    else if (IsSitInteraction(ActionTag))
+    {
+        bInteractionSuppressInterestUntilChase = true;
+    }
+
+    if (UBlackboardComponent* BB = GetBlackboardComponent())
+    {
+        if (bInteractionDisableAllSenses || bInteractionSuppressInterestUntilChase)
+        {
+            BB->SetValueAsBool(BB_HasInterest, false);
+            BB->SetValueAsBool(BB_IsInvestigating, false);
+            BB->SetValueAsBool(BB_IsChasing, false);
+            BB->SetValueAsBool(BB_HasVisualContact, false);
+            BB->SetValueAsFloat(BB_Alertness, Alertness);
+            BB->ClearValue(BB_HeardLocation);
+        }
+    }
+}
+
+void AEnemyAIController::ClearSpecialObjectInteractionRuntimeFlags()
+{
+    bInteractionDisableAllSenses = false;
+    bInteractionSuppressInterestUntilChase = false;
+}
+
+void AEnemyAIController::SnapToObjectInteractionAnchor(AEnemyBase* SelfEnemy, AActor* TargetActor, const FGameplayTag& ActionTag) const
+{
+    if (!SelfEnemy || !TargetActor || Cast<AEnemyBase>(TargetActor))
+    {
+        return;
+    }
+
+    if (!IsSleepInteraction(ActionTag) && !IsSitInteraction(ActionTag))
+    {
+        return;
+    }
+
+    FVector SnapLocation = TargetActor->GetActorLocation();
+    FRotator SnapRotation = SelfEnemy->GetActorRotation();
+
+    TArray<USceneComponent*> SceneComponents;
+    TargetActor->GetComponents<USceneComponent>(SceneComponents);
+    for (USceneComponent* SceneComp : SceneComponents)
+    {
+        if (!SceneComp || SceneComp == TargetActor->GetRootComponent())
+        {
+            continue;
+        }
+
+        if (SceneComp->GetFName() == ObjectInteractionAnchorComponentName)
+        {
+            SnapLocation = SceneComp->GetComponentLocation();
+            SnapRotation = SceneComp->GetComponentRotation();
+            break;
+        }
+    }
+
+    // 没有锚点时，使用目标物体朝向，避免坐下/躺下时朝向随机。
+    if (SnapRotation.IsNearlyZero())
+    {
+        SnapRotation = TargetActor->GetActorRotation();
+    }
+
+    SelfEnemy->TeleportTo(SnapLocation, FRotator(0.0f, SnapRotation.Yaw, 0.0f), false, true);
 }
 
 // 应用互动朝向
@@ -1556,7 +1904,8 @@ void AEnemyAIController::TryShowInteractionDialogueBubble(
     AEnemyBase* SelfEnemy,
     AActor* TargetActor,
     const FGameplayTag& ActionTag,
-    bool bIsChatLike
+    bool bIsChatLike,
+    bool bUseDelay
 )
 {
     if(!bEnableInteractionDialogueBubble || !SelfEnemy || !ActionTag.IsValid())
@@ -1580,11 +1929,14 @@ void AEnemyAIController::TryShowInteractionDialogueBubble(
         return;
     }
 
-    // 清理上一次的对话延迟任务
-    ClearDialogueBubbleDelayTimers();
+    // 仅在首次展示时清理并使用延迟队列，避免自动刷新时重复取消未执行任务
+    if (bUseDelay)
+    {
+        ClearDialogueBubbleDelayTimers();
+    }
 
-    // 延时显示源AI对话
-    const float RealSourceDelay = bEnableStaggeredChatBubble ? SourceBubbleDelay : 0.0f;
+    // 延时显示源AI对话（自动刷新时直接更新）
+    const float RealSourceDelay = (bUseDelay && bEnableStaggeredChatBubble) ? SourceBubbleDelay : 0.0f;
     ScheduleDialogueBubble(SelfEnemy, SourceLine, RealSourceDelay, SourceBubbleDelayTimerHandle);
 
     // 非聊天行为不显示
@@ -1621,7 +1973,7 @@ void AEnemyAIController::TryShowInteractionDialogueBubble(
     {
         if(TargetEnemy)
         {
-            const float RealTargetDelay = bEnableStaggeredChatBubble ? TargetBubbleDelay : 0.0f;
+            const float RealTargetDelay = (bUseDelay && bEnableStaggeredChatBubble) ? TargetBubbleDelay : 0.0f;
             ScheduleDialogueBubble(TargetEnemy, TargetLine, RealTargetDelay, TargetBubbleDelayTimerHandle);
         }
     }
@@ -1668,6 +2020,60 @@ void AEnemyAIController::ClearDialogueBubbleDelayTimers()
     GetWorldTimerManager().ClearTimer(TargetBubbleDelayTimerHandle);
 }
 
+// 开启对话自动刷新
+void AEnemyAIController::StartDialogueRefreshLoop(
+    AEnemyBase* SelfEnemy,
+    AActor* TargetActor,
+    const FGameplayTag& ActionTag,
+    bool bIsChatLike)
+{
+    StopDialogueRefreshLoop();
+
+    if (!bEnableDialogueAutoRefresh || !bEnableInteractionDialogueBubble || !SelfEnemy || !TargetActor || !ActionTag.IsValid())
+    {
+        return;
+    }
+
+    const float Interval = FMath::Max(DialogueRefreshInterval, 0.1f);
+    const float FirstDelay = DialogueStartDelay > KINDA_SMALL_NUMBER ? DialogueStartDelay : Interval;
+
+    TWeakObjectPtr<AEnemyBase> WeakSelfEnemy = SelfEnemy;
+    TWeakObjectPtr<AActor> WeakTargetActor = TargetActor;
+
+    FTimerDelegate RefreshDelegate;
+    RefreshDelegate.BindWeakLambda(this, [this, WeakSelfEnemy, WeakTargetActor, ActionTag, bIsChatLike]()
+    {
+        if (!bIsRunningPendingInteraction)
+        {
+            return;
+        }
+
+        AEnemyBase* ValidSelfEnemy = WeakSelfEnemy.Get();
+        AActor* ValidTargetActor = WeakTargetActor.Get();
+        if (!ValidSelfEnemy || !ValidTargetActor)
+        {
+            return;
+        }
+
+        // 自动刷新时直接替换文本，不再使用延迟队列，避免刷新与延迟互相覆盖
+        TryShowInteractionDialogueBubble(ValidSelfEnemy, ValidTargetActor, ActionTag, bIsChatLike, false);
+    });
+
+    GetWorldTimerManager().SetTimer(
+        DialogueRefreshTimerHandle,
+        RefreshDelegate,
+        Interval,
+        true,
+        FirstDelay
+    );
+}
+
+// 停止对话自动刷新
+void AEnemyAIController::StopDialogueRefreshLoop()
+{
+    GetWorldTimerManager().ClearTimer(DialogueRefreshTimerHandle);
+}
+
 // 隐藏头顶文本
 void AEnemyAIController::HideInteractionDialogueBubble(AEnemyBase* SelfEnemy, AActor* TargetActor) const
 {
@@ -1696,6 +2102,10 @@ void AEnemyAIController::EnterGameOverFire(AActor* TargetActor)
     GetWorldTimerManager().ClearTimer(DetectionTimerHandle);
     GetWorldTimerManager().ClearTimer(PendingInteractionTimerHandle);
     GetWorldTimerManager().ClearTimer(InteractionFacingTimerHandle);
+    GetWorldTimerManager().ClearTimer(InjectedPathTurnTimerHandle);
+    ResetInjectedPathTurnState();
+    StopDialogueRefreshLoop();
+    ClearDialogueBubbleDelayTimers();
 
     bUseForcedInteractionStateTag = false;
     ForcedInteractionStateTag = FGameplayTag();

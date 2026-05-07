@@ -97,6 +97,12 @@ struct FLockedAIPath
 
 	// 已确认要执行的行为的持续时长
 	float ConfirmedDuration = 0.0f;
+
+	// 是否已记录“斗殴触发后清空能量”
+	bool bBrawlEnergyDrained = false;
+
+	// 斗殴触发时被清空的剩余能量（用于删除路径时返还）
+	float BrawlDrainedEnergy = 0.0f;
 };
 
 UCLASS()
@@ -528,6 +534,12 @@ protected:
 		AActor* TargetActor,
 		FInteractionActionOption& InOutOption) const;
 
+	// BrawlBehaviorTag 未配置时的兜底：从 SourceAI 的特质规则中搜索第一个非聊天类互动选项
+	bool TryFindFirstNonChatOptionFromTraits(
+		AEnemyBase* SourceAI,
+		AActor* TargetActor,
+		FInteractionActionOption& OutOption) const;
+
 	// 输出最终执行行为
 	// 只做决策，不在这里上锁
 	bool TryResolveLockedOrNewPairDecision(
@@ -547,6 +559,8 @@ protected:
 	void ClearPairDecisionLock(const AActor* SourceActor, const AActor* TargetActor);
 	// 判断是否为聊天类行为
 	bool IsChatEntryAction(const FGameplayTag& ActionTag) const;
+	// 判断是否为斗殴类行为
+	bool IsBrawlAction(const FGameplayTag& ActionTag) const;
 
 	// 注册ai事件结束委托
 	void RegisterEnemyInteractionResolvedDelegates();

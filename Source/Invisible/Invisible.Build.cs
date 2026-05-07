@@ -9,7 +9,7 @@ public class Invisible : ModuleRules
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 	
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput",
-    "GameplayTags", "GameplayTasks", "GameplayAbilities" , "AIModule", "UMG", "NavigationSystem", "DeveloperSettings", "MotionWarping"});
+    "GameplayTags", "GameplayTasks", "GameplayAbilities" , "AIModule", "UMG", "NavigationSystem", "DeveloperSettings", "MotionWarping", "Niagara"});
 
 		PrivateDependencyModuleNames.AddRange(new string[] {  });
 
