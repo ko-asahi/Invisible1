@@ -1,0 +1,28 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.2",
+	"FriendlyName": "sizzoNNz_Spell Area Indicator",
+	"Description": "Indicators for 'pre-spell' area notifications",
+	"Category": "Other",
+	"CreatedBy": "sizzoNNz",
+	"CreatedByURL": "https://sizzonnz.site/",
+	"DocsURL": "https://sizzonnz.site/",
+	"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/product/d3720ca9782545bba669d70dce90cc73",
+	"SupportURL": "https://discord.com/invite/uKWC7UYx",
+	"EngineVersion": "5.6.0",
+	"CanContainContent": true,
+	"Installed": true,
+	"Modules": [
+		{
+			"Name": "SIZZ_Spell_Indicator",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"PlatformAllowList": [
+				"Win64",
+				"Mac",
+				"Linux"
+			]
+		}
+	]
+}

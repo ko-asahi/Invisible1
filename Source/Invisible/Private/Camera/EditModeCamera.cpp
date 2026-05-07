@@ -4,7 +4,10 @@
 #include "Camera/EditModeCamera.h"
 #include "Camera/CameraComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Kismet/KismetMathLibrary.h" 
 #include "GameFramework/PlayerController.h"
+#include "Engine/World.h"
+#include "CollisionQueryParams.h"
 
 // Sets default values
 AEditModeCamera::AEditModeCamera()
@@ -40,11 +43,11 @@ AEditModeCamera::AEditModeCamera()
 	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
 	Camera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 
-	// 鼠标投影指示器组件
-	GroundRingMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("GroundRingMesh"));
-	GroundRingMesh->SetupAttachment(RootComponent);
-	GroundRingMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	GroundRingMesh->SetVisibility(false);
+	// 鼠标地面指示器 Niagara 组件
+	GroundRingNiagara = CreateDefaultSubobject<UNiagaraComponent>(TEXT("GroundRingNiagara"));
+	GroundRingNiagara->SetupAttachment(RootComponent);
+	GroundRingNiagara->SetAutoActivate(false);
+	GroundRingNiagara->SetVisibility(false);
 
 }
 
@@ -52,6 +55,13 @@ AEditModeCamera::AEditModeCamera()
 void AEditModeCamera::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// 指示器与 Niagara 系统绑定
+	if (GroundRingNiagara && GroundRingNiagaraSystem)
+	{
+		GroundRingNiagara->SetAsset(GroundRingNiagaraSystem);
+	}
+
 	ApplyRotation();
 }
 
@@ -91,22 +101,67 @@ void AEditModeCamera::OrbitCamera(float DeltaYaw)
 	ApplyRotation();
 }
 
-// 更新鼠标投影指示器
+// 更新鼠标投影指示器（仅投影到地面）
 void AEditModeCamera::UpdateGroundRing(APlayerController* PC)
 {
-	if(!PC) return;
-
-	// 获取鼠标世界位置
-	FHitResult HitResult;
-
-	if(PC->GetHitResultUnderCursor(ECC_Visibility, false, HitResult))
+	if (!PC || !GroundRingNiagara)
 	{
-		GroundRingMesh->SetWorldLocation(HitResult.Location + FVector(0.0f, 0.0f, 2.0f));
-		GroundRingMesh->SetVisibility(true);
+		return;
 	}
-	else
+
+	// 未配置 Niagara 资源时保持隐藏，避免空资源状态下反复激活/停用
+	if (!GroundRingNiagaraSystem)
 	{
-		GroundRingMesh->SetVisibility(false);
+		GroundRingNiagara->SetVisibility(false);
+		GroundRingNiagara->Deactivate();
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	// 鼠标 → 世界射线
+	FVector WorldOrigin;
+	FVector WorldDirection;
+	if (!PC->DeprojectMousePositionToWorld(WorldOrigin, WorldDirection))
+	{
+		GroundRingNiagara->SetVisibility(false);
+		GroundRingNiagara->Deactivate();
+		return;
+	}
+
+	constexpr float TraceLength = 100000.0f;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(EditModeCursorTrace), /*bTraceComplex*/ false, this);
+	Params.AddIgnoredActor(this);
+
+	FHitResult Hit;
+	if (!World->LineTraceSingleByChannel(Hit, WorldOrigin, WorldOrigin + WorldDirection * TraceLength, ECC_Visibility, Params))
+	{
+		GroundRingNiagara->SetVisibility(false);
+		GroundRingNiagara->Deactivate();
+		return;
+	}
+
+	// 只处理法线朝上的水平面（ImpactNormal.Z > 0.7 ≈ 倾斜角 < 45°）
+	if (Hit.ImpactNormal.Z < 0.7f)
+	{
+		GroundRingNiagara->SetVisibility(false);
+		GroundRingNiagara->Deactivate();
+		return;
+	}
+
+	// Niagara 指示器：对齐地面法线并放置到命中点
+	const FRotator GroundEffectRotation = UKismetMathLibrary::MakeRotFromZ(Hit.ImpactNormal);
+
+	GroundRingNiagara->SetWorldLocation(Hit.ImpactPoint);
+	GroundRingNiagara->SetWorldRotation(GroundEffectRotation);
+	GroundRingNiagara->SetVisibility(true);
+	if (!GroundRingNiagara->IsActive())
+	{
+		GroundRingNiagara->Activate(true);
 	}
 }
 

@@ -9,6 +9,8 @@
 #include <GameFramework/SpringArmComponent.h>
 #include <Camera/CameraComponent.h>
 #include <Components/SceneComponent.h>
+#include "NiagaraComponent.h"
+#include "NiagaraSystem.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "EditModeCamera.generated.h"
@@ -53,9 +55,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Components")
 	UCameraComponent* Camera;
 
-	// 鼠标投影指示器组件
+	// 鼠标地面指示器 Niagara 组件
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Components")
-	UStaticMeshComponent* GroundRingMesh;
+	UNiagaraComponent* GroundRingNiagara;
+
+	// 地面指示器 Niagara 系统
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Indicator")
+	UNiagaraSystem* GroundRingNiagaraSystem = nullptr;
 
 	// 生成时相机俯视角
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera")

@@ -15,8 +15,10 @@
  */
 
 
-
+class UMotionWarpingComponent;
 class UAIInteractionButtonsWidget;
+class UAIDialogueBubbleWidget;
+class UAnimSequence;
 
 // 敌人警戒配置结构体
 USTRUCT(BlueprintType)
@@ -307,14 +309,74 @@ public:
     UFUNCTION(BlueprintCallable, Category="AI|Interaction")
     void HideInteractionButtons();
 
+
+    // ===== ai对话框相关 =====
+
+    // 头顶对话框组件
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="UI|Dialogue")
+    class UWidgetComponent* DialogueBubbleWidgetComp;
+
+    // 头顶对话框类（蓝图指定）
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="UI|Dialogue")
+    TSubclassOf<UAIDialogueBubbleWidget> DialogueBubbleWidgetClass;
+
+    // 显示头顶对话框
+    UFUNCTION(BlueprintCallable, Category="AI|Dialogue")
+    void ShowDialogueBubble(const FText& InText);
+
+    // 隐藏头顶对话框
+    UFUNCTION(BlueprintCallable, Category="AI|Dialogue")
+    void HideDialogueBubble();
+
     // ===== ai交互行为相关 =====
 
     // 互动时转向速度
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction", meta = (ClampMin = "0.0"))
     float InteractionTurnSpeed = 180.0f;
 
+    // 注入路径起步转身动画（单段：前半右转，后半左转）
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|InjectedPath|Turn")
+    UAnimSequence* InjectedPathTurnAnim = nullptr;
 
-protected:
+    // 单段动画左右切分点（0~1，默认0.5）
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|InjectedPath|Turn", meta=(ClampMin="0.05", ClampMax="0.95", UIMin="0.05", UIMax="0.95"))
+    float InjectedPathTurnSplitNormalizedTime = 0.5f;
+
+    // 起步前触发转身的最小角度（度）
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|InjectedPath|Turn", meta=(ClampMin="0.0", UIMin="0.0", UIMax="180.0"))
+    float InjectedPathTurnMinAngle = 15.0f;
+
+    // 转身动画播放速率
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|InjectedPath|Turn", meta=(ClampMin="0.1", UIMin="0.1", UIMax="3.0"))
+    float InjectedPathTurnPlayRate = 1.0f;
+
+    // 转身阶段最大等待时长（秒），避免动画事件缺失导致卡住
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|InjectedPath|Turn", meta=(ClampMin="0.1", UIMin="0.1", UIMax="5.0"))
+    float InjectedPathTurnMaxWaitTime = 1.2f;
+
+    // ===== 斗殴运动扭曲配置 =====
+
+    // 运动扭曲组件
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="AI|Animation")
+    UMotionWarpingComponent* MotionWarpingComp = nullptr;
+
+    // 是否启用斗殴运动扭曲
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction|BrawlWarp")
+    bool bEnableBrawlMotionWarping = true;
+
+    // 斗殴行为根标签
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction|BrawlWarp", meta=(Categories="Behavior.AI"))
+    FGameplayTag BrawlBehaviorRootTag;
+
+    // 斗殴运动扭曲目标名称 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction|BrawlWarp")
+    FName BrawlWarpTargetName = TEXT("BrawlTarget");
+
+    // 斗殴运动扭曲目标半间距
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction|BrawlWarp", meta=(ClampMin="10.0"))
+    float BrawlHalfSpacing = 80.0f;
+    
+    protected:
     // 按键点击句柄
     UFUNCTION()
     void HandleInteractionButtonClicked(

@@ -9,6 +9,7 @@
 #include "Camera/EditModeCamera.h"
 #include "Enemy/AIInfoPanelWidget.h"
 #include "Enemy/Interaction/AIInteractionTypes.h"
+#include "UObject/ObjectKey.h"
 
 #include "InvisiblePlayerController.generated.h"
 
@@ -16,8 +17,47 @@
  * 
  */
 
+// 双方互动锁结构体
+USTRUCT()
+struct FInteractionPairKey
+{
+    GENERATED_BODY()
 
+    FObjectKey SourceKey;
+    FObjectKey TargetKey;
 
+	// 默认构造函数
+    FInteractionPairKey() = default;
+	// 自定义构造函数
+    FInteractionPairKey(const AActor* InSource, const AActor* InTarget)
+        : SourceKey(InSource), TargetKey(InTarget)
+    {
+    }
+
+    // 用于判断两个键是否相等
+    bool operator==(const FInteractionPairKey& Other) const
+    {
+        return SourceKey == Other.SourceKey && TargetKey == Other.TargetKey;
+    }
+
+	// 将两个值的哈希值合并成一个哈希值
+    friend uint32 GetTypeHash(const FInteractionPairKey& Key)
+    {
+        return HashCombine(GetTypeHash(Key.SourceKey), GetTypeHash(Key.TargetKey));
+    }
+};
+
+// 锁定行为选项结构体
+USTRUCT()
+struct FInteractionPairDecisionLock
+{
+    GENERATED_BODY()
+
+    // 是否激活
+    bool bActive = false;
+    // 已锁定的行为选项
+    FInteractionActionOption LockedOption;
+};
 
 // 保存单个ai路径
 USTRUCT()
@@ -57,6 +97,12 @@ struct FLockedAIPath
 
 	// 已确认要执行的行为的持续时长
 	float ConfirmedDuration = 0.0f;
+
+	// 是否已记录“斗殴触发后清空能量”
+	bool bBrawlEnergyDrained = false;
+
+	// 斗殴触发时被清空的剩余能量（用于删除路径时返还）
+	float BrawlDrainedEnergy = 0.0f;
 };
 
 UCLASS()
@@ -266,7 +312,42 @@ public:
 	TArray<FInteractionActionOption> PreviewCandidateActions;   // 预览可选行为列表
 
 
+	// ===== 斗殴替换聊天与锁定功能 =====
+	
+	// 是否启用斗殴替换触发
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="EditMode|Interaction|Brawl")
+	bool bEnableIrritableChatToBrawl = true;
 
+	// 易怒特质Tag
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="EditMode|Interaction|Brawl", meta=(Categories="Trait.AI"))
+	FGameplayTag IrritableTraitTag;
+
+	// 聊天Tag，用于判断当前点击行为是否为聊天类
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="EditMode|Interaction|Brawl", meta=(Categories="Behavior.AI"))
+	FGameplayTag ChatBehaviorRootTag;
+
+	// 斗殴Tag
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="EditMode|Interaction|Brawl", meta=(Categories="Behavior.AI"))
+	FGameplayTag BrawlBehaviorTag;
+
+	// 点击聊天后被替换为斗殴的概率
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="EditMode|Interaction|Brawl", meta=(ClampMin="0.0", ClampMax="1.0"))
+	float ChatToBrawlProbability = 0.35f;
+
+	// 行为结束后自动解锁
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="EditMode|Interaction|Brawl")
+	bool bUnlockPairLockOnInteractionEnd = true;
+
+
+	// ===== 游戏结束功能 =====
+
+	// 设置游戏输入锁定
+	UFUNCTION(BlueprintCallable, Category="GameOver")
+	void SetGameplayInputLocked(bool bLocked);
+
+	// 获取游戏输入是否锁定
+	UFUNCTION(BlueprintPure, Category="GameOver")
+	bool IsGameplayInputLocked() const { return bGameplayInputLocked; }
 
 protected:
 	virtual void BeginPlay() override;
@@ -343,7 +424,11 @@ protected:
 	// 绘制路径
 	void DrawPathPoints(const TArray<FVector>& Points, const FColor& Color) const;
 
-	
+	// 将预览路径终点XY吸附到预览目标中心（保留原终点Z）成功返回true
+	bool SnapPreviewPathEndToInteractionTargetXY();
+
+	// 吸附后按能量重新截断预览路径
+	bool ReClampPreviewPathByCurrentBudget(float MaxAllowedLength);
 
 	// 删除当前选中的ai路径
 	void OnRemoveSelectedAIPath();
@@ -421,6 +506,91 @@ protected:
 
 	// 查找从 SourceAI 到 TargetAI 的互动路径
 	int32 FindLockedInteractionPathIndex(const AEnemyBase* SourceAI, const AActor* TargetActor) const; 
+
+	// ===== 斗殴替换聊天、并且锁定第一次行为的功能 =====
+
+	// 未来或许要加入锁定功能？即第一次触发斗殴替换后，无论玩家如何删除路径并重新绘制到目标敌人的路径，始终显示并触发的是斗殴行为
+
+	// 决策锁
+	TMap<FInteractionPairKey, FInteractionPairDecisionLock> InteractionPairDecisionLocks;
+
+	// 尝试从 ActionProfile 读取行为的默认参数（能量/距离/时长）
+	bool TryBuildOptionFromActionProfile(
+		const FGameplayTag& ActionTag,
+		const FText& FallbackText,
+		FInteractionActionOption& OutOption) const;
+
+	// 从 TraitDefinition 的整套解析方案中获取配置值
+	bool TryResolveFinalOptionFromTraitRules(
+		AEnemyBase* SourceAI,
+		AActor* TargetActor,
+		const FGameplayTag& WantedActionTag,
+		const FText& FallbackText,
+		FInteractionActionOption& OutOption) const;
+
+	// 若满足“易怒+概率”，把聊天行为改成斗殴
+	bool TryOverrideChatOptionToBrawl(
+		AEnemyBase* SourceAI,
+		AActor* TargetActor,
+		FInteractionActionOption& InOutOption) const;
+
+	// BrawlBehaviorTag 未配置时的兜底：从 SourceAI 的特质规则中搜索第一个非聊天类互动选项
+	bool TryFindFirstNonChatOptionFromTraits(
+		AEnemyBase* SourceAI,
+		AActor* TargetActor,
+		FInteractionActionOption& OutOption) const;
+
+	// 输出最终执行行为
+	// 只做决策，不在这里上锁
+	bool TryResolveLockedOrNewPairDecision(
+		AEnemyBase* SourceAI,
+		AActor* TargetActor,
+		const FInteractionActionOption& ClickedOption,
+		FInteractionActionOption& OutFinalOption,
+		bool& bOutShouldCreatePairLock) const;
+
+	// 查找双方互动锁（只读）
+	const FInteractionPairDecisionLock* FindPairDecisionLock(const AActor* SourceActor, const AActor* TargetActor) const;
+	// 查找双方互动锁（可读写）
+	FInteractionPairDecisionLock* FindPairDecisionLockMutable(const AActor* SourceActor, const AActor* TargetActor);
+	// 设置双方互动锁
+	void SetPairDecisionLock(const AActor* SourceActor, const AActor* TargetActor, const FInteractionActionOption& LockedOption);
+	// 清除双方互动锁
+	void ClearPairDecisionLock(const AActor* SourceActor, const AActor* TargetActor);
+	// 判断是否为聊天类行为
+	bool IsChatEntryAction(const FGameplayTag& ActionTag) const;
+	// 判断是否为斗殴类行为
+	bool IsBrawlAction(const FGameplayTag& ActionTag) const;
+
+	// 注册ai事件结束委托
+	void RegisterEnemyInteractionResolvedDelegates();
+
+	// 注销ai事件结束委托
+	void UnregisterEnemyInteractionResolvedDelegates();
+
+	// 处理ai事件结束
+	void HandleInteractionResolvedFromAI(
+		AActor* SourceActor,
+		AActor* TargetActor,
+		FGameplayTag ActionTag,
+		EInteractionEndReason EndReason);
+
+	// 生命周期结束后，解绑ai事件结束委托
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+	// 计算源AI和目标AI最后交互点
+	bool BuildExpectedInteractionPointForTargetHold(
+		const FLockedAIPath& LockedPath,
+		const APawn* SourcePawn,
+		const AActor* TargetActor,
+		FVector& OutExpectedPoint) const;
+
+
+	// ===== 游戏结束功能 =====
+
+	// 游戏输入是否锁定
+	UPROPERTY(BlueprintReadOnly, Category="GameOver")
+	bool bGameplayInputLocked = false;
 
 private:
 	// 生成相机实例(运行时)
