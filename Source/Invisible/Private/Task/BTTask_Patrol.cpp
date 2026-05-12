@@ -5,160 +5,231 @@
 #include "Enemy/EnemyBase.h"
 #include "Enemy/EnemyAIController.h"
 #include "AIController.h"
-#include "GameFramework/CharacterMovementComponent.h"
-#include "Navigation/PathFollowingComponent.h"
-#include "Enemy/PatrolPath.h"
 #include "BehaviorTree/BlackboardComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
 
+namespace
+{
+	void WritePatrolBehaviorBlackboard(AEnemyBase* Enemy, UBlackboardComponent* BB, const FPatrolWaypointData& Data, const FVector& AnchorWorldLocation)
+	{
+		if (!Enemy || !BB)
+		{
+			return;
+		}
+
+		BB->SetValueAsEnum(TEXT("WaypointBehavior"), static_cast<uint8>(Data.Behavior));
+		BB->SetValueAsFloat(TEXT("WaypointWaitTime"), Data.WaitTime);
+		BB->SetValueAsFloat(TEXT("LookAngle"), Data.LookAngle);
+		BB->SetValueAsFloat(TEXT("LookSpeed"), Data.LookSpeed);
+		BB->SetValueAsFloat(TEXT("PreLookPauseTime"), Data.PreLookPauseTime);
+
+		float CenterYaw = Enemy->GetActorRotation().Yaw;
+		if (Data.bUseCustomLookCenter)
+		{
+			float AnchorYaw = 0.0f;
+			if (Enemy->GetCurrentPatrolBehaviorAnchorYaw(AnchorWorldLocation, AnchorYaw))
+			{
+				CenterYaw = AnchorYaw;
+			}
+			CenterYaw = FRotator::NormalizeAxis(CenterYaw + Data.LookCenterYawOffset);
+		}
+		BB->SetValueAsBool(TEXT("UseLookCenterYaw"), Data.bUseCustomLookCenter);
+		BB->SetValueAsFloat(TEXT("LookCenterYaw"), CenterYaw);
+	}
+}
 
 UBTTask_Patrol::UBTTask_Patrol()
 {
-    NodeName = TEXT("Patrol To Next Point");
-    bNotifyTick = true;
+	NodeName = TEXT("Patrol Spline Follow");
+	bNotifyTick = true;
 }
 
 EBTNodeResult::Type UBTTask_Patrol::ExecuteTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory)
 {
-    AEnemyAIController* AIController = Cast<AEnemyAIController>(OwnerComp.GetAIOwner());
-    if(!AIController) return EBTNodeResult::Failed;
+	AEnemyAIController* AIController = Cast<AEnemyAIController>(OwnerComp.GetAIOwner());
+	if (!AIController)
+	{
+		return EBTNodeResult::Failed;
+	}
 
-    AEnemyBase* Enemy = Cast<AEnemyBase>(AIController->GetPawn());
-    if(!Enemy || !Enemy->AssignedPatrolPath || Enemy->AssignedPatrolPath->Num() == 0)
-        return EBTNodeResult::Failed;
+	AEnemyBase* Enemy = Cast<AEnemyBase>(AIController->GetPawn());
+	if (!Enemy)
+	{
+		return EBTNodeResult::Failed;
+	}
 
-    AActor* TargetPoint = Enemy->GetNextPatrolPoint();
-    if(!TargetPoint) return EBTNodeResult::Failed;
+	UCharacterMovementComponent* MoveComp = Enemy->GetCharacterMovement();
+	if (!MoveComp)
+	{
+		return EBTNodeResult::Failed;
+	}
 
-    // 记录本次到达的索引，供回调中读取行为数据
-    int32 ArrivedIndex = Enemy->CurrentPatrolPointIndex;
+	FBTTask_PatrolMemory* Memory = reinterpret_cast<FBTTask_PatrolMemory*>(NodeMemory);
+	Memory->CachedMaxWalkSpeed = MoveComp->MaxWalkSpeed;
+	Memory->bReturningToStart = false;
+	MoveComp->MaxWalkSpeed = FMath::Max(1.0f, Enemy->PatrolSpeed * PatrolSpeedScale);
 
-    // 更新下一个索引(已废弃，为了配合编辑模式路径点)
-    //Enemy->CurrentPatrolPointIndex = (Enemy->CurrentPatrolPointIndex + 1) % Enemy->AssignedPatrolPath->Num();
+	AIController->StopMovement();
 
+	MoveComp->bOrientRotationToMovement = true;
+	if (MoveComp->MovementMode == MOVE_None)
+	{
+		MoveComp->SetMovementMode(MOVE_Walking);
+	}
 
-    FBTTask_PatrolMemory* Memory = reinterpret_cast<FBTTask_PatrolMemory*>(NodeMemory);
+	float RouteLength = 0.0f;
+	if (!Enemy->GetPatrolRouteLength(RouteLength))
+	{
+		return EBTNodeResult::Failed;
+	}
 
-    // 绑定移动完成回调
-    // ReceiveMoveCompleted 是动态多播委托，不支持 AddLambda
-    // 改用 PathFollowingComponent::OnRequestFinished（普通多播委托）
-    Memory->MoveCompletedHandle = AIController->GetPathFollowingComponent()->OnRequestFinished.AddLambda(
-        [this, &OwnerComp, Memory, ArrivedIndex](FAIRequestID RequestID, const FPathFollowingResult& Result)
-        {
-            AEnemyAIController* Controller = Cast<AEnemyAIController>(OwnerComp.GetAIOwner());
+	Memory->RouteLength = RouteLength;
 
-            if (Controller && Controller->GetPathFollowingComponent())
-                Controller->GetPathFollowingComponent()->OnRequestFinished.Remove(Memory->MoveCompletedHandle);
+	float ProjectedDist = 0.0f;
+	if (!Enemy->ProjectWorldLocationToPatrolDistance(Enemy->GetActorLocation(), ProjectedDist))
+	{
+		Memory->DistanceAlongRoute = 0.f;
+	}
+	else
+	{
+		Memory->DistanceAlongRoute = FMath::Clamp(ProjectedDist, 0.f, RouteLength);
+	}
 
-            if (Result.Code == EPathFollowingResult::Success)
-            {
-                // 读取该路径点的行为数据并写入 Blackboard
-                AEnemyBase* Pawn = Cast<AEnemyBase>(Controller ? Controller->GetPawn() : nullptr);
-                UBlackboardComponent* BB = Controller ? Controller->GetBlackboardComponent() : nullptr;
+	Enemy->UpdatePatrolBehaviorAnchorCooldown(Enemy->GetActorLocation());
 
-                // 为了配合编辑模式路径点，将路径点自增由原有的提前自增改为在此处自增
-                if (Pawn && Pawn->AssignedPatrolPath && Pawn->AssignedPatrolPath->Num() > 0)
-                {
-                    Pawn->CurrentPatrolPointIndex =
-                        (ArrivedIndex + 1) % Pawn->AssignedPatrolPath->Num();
-                }
-
-                if (Pawn && Pawn->AssignedPatrolPath && BB)
-                {
-                    FPatrolWaypointData Data = Pawn->AssignedPatrolPath->GetWaypointData(ArrivedIndex);
-
-                    BB->SetValueAsEnum(TEXT("WaypointBehavior"), (uint8)Data.Behavior);
-                    BB->SetValueAsFloat(TEXT("WaypointWaitTime"), Data.WaitTime);
-                    BB->SetValueAsFloat(TEXT("LookAngle"), Data.LookAngle);
-                    BB->SetValueAsFloat(TEXT("LookSpeed"), Data.LookSpeed);
-                    BB->SetValueAsFloat(TEXT("PreLookPauseTime"), Data.PreLookPauseTime);
-
-                    // 若使用自定义中轴线，则设置 Point 和 LookCenterYawOffset
-                    float CenterYaw = Pawn->GetActorRotation().Yaw;
-                    if(Data.bUseCustomLookCenter)
-                    {
-                        if(IsValid(Data.Point))
-                        {
-                            // const FVector ToCenter = (Data.LookCenterActor->GetActorLocation() - Pawn->GetActorLocation()).GetSafeNormal2D();
-
-                            // if(!ToCenter.IsNearlyZero())
-                            // {
-                            //     CenterYaw = ToCenter.Rotation().Yaw;
-                            // }
-                            CenterYaw = Data.Point->GetActorRotation().Yaw;
-                        }
-
-                        CenterYaw = FRotator::NormalizeAxis(CenterYaw + Data.LookCenterYawOffset);
-                    }
-
-                    BB->SetValueAsBool(TEXT("UseLookCenterYaw"), Data.bUseCustomLookCenter);
-                    BB->SetValueAsFloat(TEXT("LookCenterYaw"), CenterYaw);
-                }
-                FinishLatentTask(OwnerComp, EBTNodeResult::Succeeded);
-            }
-            else
-            {
-                FinishLatentTask(OwnerComp, EBTNodeResult::Failed);
-            }
-        });
-
-    // 发起移动
-    FAIMoveRequest MoveRequest;
-    MoveRequest.SetGoalActor(TargetPoint);
-    MoveRequest.SetAcceptanceRadius(AcceptanceRadius);
-    MoveRequest.SetCanStrafe(false);
-
-    // 状态恢复，让后续 MoveTo 阶段可边走边转（含避障）
-    if (Enemy && Enemy->GetCharacterMovement())
-    {
-        Enemy->GetCharacterMovement()->bOrientRotationToMovement = true;
-    }
-
-    AIController->MoveTo(MoveRequest);
-
-    // 返回 InProgress，告知行为树正在执行
-    return EBTNodeResult::InProgress;
+	return EBTNodeResult::InProgress;
 }
-
 
 void UBTTask_Patrol::TickTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory, float DeltaSeconds)
 {
-    UBlackboardComponent* BB = OwnerComp.GetBlackboardComponent();
-    if (BB && BB->GetValueAsBool(AEnemyAIController::BB_HasInterest))
-    {
-        // 巡逻中检测到兴趣点，立刻完成任务（Failed 会使 Selector 继续尝试下一分支）
-        FinishLatentTask(OwnerComp, EBTNodeResult::Failed);
-    }
-}
+	UBlackboardComponent* BB = OwnerComp.GetBlackboardComponent();
+	if (BB && BB->GetValueAsBool(AEnemyAIController::BB_HasInterest))
+	{
+		FinishLatentTask(OwnerComp, EBTNodeResult::Failed);
+		return;
+	}
 
+	AEnemyAIController* AIController = Cast<AEnemyAIController>(OwnerComp.GetAIOwner());
+	AEnemyBase* Enemy = AIController ? Cast<AEnemyBase>(AIController->GetPawn()) : nullptr;
+	if (!AIController || !Enemy)
+	{
+		FinishLatentTask(OwnerComp, EBTNodeResult::Failed);
+		return;
+	}
+
+	UCharacterMovementComponent* MoveComp = Enemy->GetCharacterMovement();
+	if (!MoveComp)
+	{
+		FinishLatentTask(OwnerComp, EBTNodeResult::Failed);
+		return;
+	}
+
+	FBTTask_PatrolMemory* Memory = reinterpret_cast<FBTTask_PatrolMemory*>(NodeMemory);
+
+	const float RouteLength = Memory->RouteLength;
+	if (RouteLength <= KINDA_SMALL_NUMBER)
+	{
+		FinishLatentTask(OwnerComp, EBTNodeResult::Failed);
+		return;
+	}
+
+	FVector ActorLoc = Enemy->GetActorLocation();
+	Enemy->UpdatePatrolBehaviorAnchorCooldown(ActorLoc);
+
+	if (Memory->bReturningToStart)
+	{
+		FVector StartLoc;
+		FRotator StartRot;
+		if (!Enemy->GetPatrolRouteTransformAtDistance(0.0f, StartLoc, StartRot))
+		{
+			FinishLatentTask(OwnerComp, EBTNodeResult::Failed);
+			return;
+		}
+
+		const FVector ReturnDelta(StartLoc.X - ActorLoc.X, StartLoc.Y - ActorLoc.Y, 0.0f);
+		const float ReturnAcceptSq = FMath::Square(ReturnToStartAcceptanceRadius);
+		if (ReturnDelta.SizeSquared() > ReturnAcceptSq)
+		{
+			Enemy->AddMovementInput(ReturnDelta.GetSafeNormal(), 1.0f, true);
+			return;
+		}
+
+		Memory->bReturningToStart = false;
+		Memory->DistanceAlongRoute = 0.0f;
+		ActorLoc = StartLoc;
+	}
+
+	const float PatrolSpeed = FMath::Max(1.0f, Enemy->PatrolSpeed * PatrolSpeedScale);
+	Memory->DistanceAlongRoute += PatrolSpeed * DeltaSeconds;
+	if (Memory->DistanceAlongRoute >= RouteLength)
+	{
+		Memory->DistanceAlongRoute = RouteLength;
+		Memory->bReturningToStart = true;
+		return;
+	}
+
+	FVector SplineLoc;
+	FRotator SplineRot;
+	if (!Enemy->GetPatrolRouteTransformAtDistance(Memory->DistanceAlongRoute, SplineLoc, SplineRot))
+	{
+		FinishLatentTask(OwnerComp, EBTNodeResult::Failed);
+		return;
+	}
+
+	const FVector FlatDelta(SplineLoc.X - ActorLoc.X, SplineLoc.Y - ActorLoc.Y, 0.f);
+	if (FlatDelta.SizeSquared() > FMath::Square(5.f))
+	{
+		Enemy->AddMovementInput(FlatDelta.GetSafeNormal(), 1.f, true);
+	}
+
+	int32 NearestIdx = INDEX_NONE;
+	float NearestDistSq = 0.f;
+	Enemy->TryGetNearestPatrolSplinePointIndex(ActorLoc, NearestIdx, NearestDistSq);
+
+	const FPatrolWaypointData Data = Enemy->GetCurrentPatrolBehaviorData(ActorLoc);
+	if (Data.Behavior != EWaypointBehavior::None && NearestIdx != INDEX_NONE && NearestIdx != Enemy->PatrolBehaviorCooldownSplinePointIndex && BB)
+	{
+		Enemy->PatrolBehaviorCooldownSplinePointIndex = NearestIdx;
+		WritePatrolBehaviorBlackboard(Enemy, BB, Data, ActorLoc);
+		FinishLatentTask(OwnerComp, EBTNodeResult::Succeeded);
+		return;
+	}
+}
 
 void UBTTask_Patrol::OnTaskFinished(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory, EBTNodeResult::Type TaskResult)
 {
-    FBTTask_PatrolMemory* Memory = reinterpret_cast<FBTTask_PatrolMemory*>(NodeMemory);
-    AEnemyAIController* AIController = Cast<AEnemyAIController>(OwnerComp.GetAIOwner());
+	FBTTask_PatrolMemory* Memory = reinterpret_cast<FBTTask_PatrolMemory*>(NodeMemory);
+	AEnemyAIController* AIController = Cast<AEnemyAIController>(OwnerComp.GetAIOwner());
 
-    // 先解绑回调，防止后续 StopMovement 触发 OnRequestFinished 导致二次 FinishLatentTask
-    if (AIController && AIController->GetPathFollowingComponent() && Memory->MoveCompletedHandle.IsValid())
-    {
-        AIController->GetPathFollowingComponent()->OnRequestFinished.Remove(Memory->MoveCompletedHandle);
-        Memory->MoveCompletedHandle.Reset();
-    }
+	if (AEnemyBase* Enemy = AIController ? Cast<AEnemyBase>(AIController->GetPawn()) : nullptr)
+	{
+		if (UCharacterMovementComponent* MoveComp = Enemy->GetCharacterMovement())
+		{
+			if (Memory->CachedMaxWalkSpeed >= 0.f)
+			{
+				MoveComp->MaxWalkSpeed = Memory->CachedMaxWalkSpeed;
+				Memory->CachedMaxWalkSpeed = -1.f;
+			}
+		}
+	}
 
-    // 非正常完成（中止或失败）时立刻停止移动
-    if (AIController && TaskResult != EBTNodeResult::Succeeded)
-    {
-        AIController->StopMovement();
-        if (APawn* Pawn = AIController->GetPawn())
-        {
-            if (UCharacterMovementComponent* MoveComp = Pawn->FindComponentByClass<UCharacterMovementComponent>())
-            {
-                MoveComp->StopMovementImmediately();
-            }
-        }
-    }
+	if (AIController)
+	{
+		AIController->StopMovement();
+		if (TaskResult != EBTNodeResult::Succeeded)
+		{
+			if (APawn* Pawn = AIController->GetPawn())
+			{
+				if (UCharacterMovementComponent* MoveComp = Pawn->FindComponentByClass<UCharacterMovementComponent>())
+				{
+					MoveComp->StopMovementImmediately();
+				}
+			}
+		}
+	}
 }
-
 
 uint16 UBTTask_Patrol::GetInstanceMemorySize() const
 {
-    return sizeof(FBTTask_PatrolMemory);
+	return sizeof(FBTTask_PatrolMemory);
 }

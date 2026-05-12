@@ -7,8 +7,13 @@
 #include "EnhancedInputSubsystems.h"
 #include "Enemy/EnemyBase.h"
 #include "Enemy/EnemyAIController.h"
+#include "Actors/Waypoint.h"
 #include "NavigationSystem.h"
 #include "NavigationPath.h"
+#include "Engine/EngineTypes.h"
+#include "CollisionQueryParams.h"
+#include "Engine/World.h"
+#include "Engine/OverlapResult.h"
 #include "DrawDebugHelpers.h"
 #include "Enemy/Trait/TraitSubsystem.h"
 #include "Enemy/Trait/TraitDefinition.h"
@@ -18,6 +23,80 @@
 #include "Interaction/InteractionTargetComponent.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogAIInteractionDebug, Log, All);
+
+void AInvisiblePlayerController::RebuildWaypointChainForEnemy(AEnemyBase* Enemy, const TArray<FVector>& PathPoints)
+{
+    if (!Enemy)
+    {
+        return;
+    }
+
+    Enemy->ClearAndDestroyWaypointChain();
+    Enemy->NextWaypoint = nullptr;
+
+    if (PathPoints.Num() < 2)
+    {
+        return;
+    }
+
+    // WaypointClass 在蓝图中可能未配置，回退到基类直接 Spawn
+    UClass* SpawnClass = *WaypointClass ? WaypointClass.Get() : AWaypoint::StaticClass();
+
+    const float MinSpacing = FMath::Max(1.0f, WaypointSpawnSpacing);
+    TArray<FVector> FilteredPoints;
+    FilteredPoints.Reserve(PathPoints.Num());
+    FilteredPoints.Add(PathPoints[0]);
+    FVector LastAccepted = PathPoints[0];
+
+    for (int32 Index = 1; Index < PathPoints.Num(); ++Index)
+    {
+        const FVector Candidate = PathPoints[Index];
+        if (Index == PathPoints.Num() - 1 || FVector::Dist(LastAccepted, Candidate) >= MinSpacing)
+        {
+            FilteredPoints.Add(Candidate);
+            LastAccepted = Candidate;
+        }
+    }
+
+    if (FilteredPoints.Num() < 2)
+    {
+        return;
+    }
+
+    TArray<AWaypoint*> SpawnedWaypoints;
+    SpawnedWaypoints.Reserve(FilteredPoints.Num());
+
+    FActorSpawnParameters SpawnParams;
+    SpawnParams.Owner = Enemy;
+    for (const FVector& Point : FilteredPoints)
+    {
+        AWaypoint* SpawnedWaypoint = GetWorld()->SpawnActor<AWaypoint>(SpawnClass, Point, FRotator::ZeroRotator, SpawnParams);
+        if (IsValid(SpawnedWaypoint))
+        {
+            SpawnedWaypoints.Add(SpawnedWaypoint);
+        }
+    }
+
+    if (SpawnedWaypoints.Num() < 2)
+    {
+        for (AWaypoint* Waypoint : SpawnedWaypoints)
+        {
+            if (IsValid(Waypoint))
+            {
+                Waypoint->Destroy();
+            }
+        }
+        return;
+    }
+
+    // 线性链：最后一个路点 NextWaypoint 为 null，AI 走完后任务结束并回到样条巡逻
+    for (int32 Index = 0; Index < SpawnedWaypoints.Num() - 1; ++Index)
+    {
+        SpawnedWaypoints[Index]->NextWaypoint = SpawnedWaypoints[Index + 1];
+    }
+
+    Enemy->NextWaypoint = SpawnedWaypoints[0];
+}
 
 
 void AInvisiblePlayerController::BeginPlay()
@@ -322,6 +401,8 @@ void AInvisiblePlayerController::SwitchMode()
                     {
                         const FLockedAIPath& LockedPath = LockedAIPaths[LockedIndex];
 
+                        // 使用引擎内置 InjectedPath 系统（逐点 NavMesh MoveTo），
+                        // 完成后自动触发交互或恢复样条巡逻
                         EnemyAI->SetInjectedPath(LockedPath.Points);
 
                         // 在写入互动前检验相关行为数据
@@ -1269,7 +1350,7 @@ void AInvisiblePlayerController::OnRemoveSelectedAIPath()
     if(!bIsEditMode) return;
 
     // 选中时才能删除
-    const APawn* SelectedPawn = Cast<APawn>(SelectedActor);
+    APawn* SelectedPawn = Cast<APawn>(SelectedActor);
     if(!SelectedPawn || !Cast<AEnemyBase>(SelectedPawn))
     {
         UE_LOG(LogTemp, Log, TEXT("未选中AI Pawn,不删除路径"));
@@ -1314,6 +1395,10 @@ void AInvisiblePlayerController::OnRemoveSelectedAIPath()
     if(RemovedCount > 0)
     {
         HideAllInteractionButtons();
+        if (AEnemyBase* SelectedEnemy = Cast<AEnemyBase>(SelectedPawn))
+        {
+            SelectedEnemy->ClearAndDestroyWaypointChain();
+        }
     }
 
     CurrentPathEnergy = FMath::Clamp(CurrentPathEnergy + Refund, 0.f, MaxPathEnergy);
@@ -1566,23 +1651,78 @@ void AInvisiblePlayerController::ResolvePreviewInteractionUnderCursor()
         return;
     }
 
-    AActor* HitActor = Hit.GetActor();
+    AActor* HitActor = bHit ? Hit.GetActor() : nullptr;
     // AEnemyBase* TargetEnemy = Cast<AEnemyBase>(HitActor);
 
     // UE_LOG(LogAIInteractionDebug, Log, TEXT("[解析预览交互] Source=%s Target=%s IsSelf=%d"),
     // *GetNameSafe(SourceEnemy), *GetNameSafe(TargetEnemy), (TargetEnemy == SourceEnemy) ? 1 : 0);
 
-    if(!HitActor || HitActor == SourceEnemy)
+    auto IsValidInteractionTarget = [SourceEnemy](AActor* Candidate) -> bool
     {
-        // UE_LOG(LogAIInteractionDebug, Warning, TEXT("[解析预览交互] return: 不存在Target或Target与Source相同"));
-        return;
+        if (!Candidate || Candidate == SourceEnemy)
+        {
+            return false;
+        }
+
+        const bool bIsEnemyTarget = Cast<AEnemyBase>(Candidate) != nullptr;
+        const bool bHasInteractionComp = Candidate->FindComponentByClass<UInteractionTargetComponent>() != nullptr;
+        return bIsEnemyTarget || bHasInteractionComp;
+    };
+
+    // 鼠标射线没有稳定命中可交互目标时，回退到“路径终点附近搜索”。
+    // 这样即使物体附近导航被切掉，也不需要精确点到物体中心才能弹按钮。
+    if (!IsValidInteractionTarget(HitActor))
+    {
+        const FVector SearchOrigin = PreviewPathPoints.Num() > 0 ? PreviewPathPoints.Last() : PreviewTarget;
+        const float SearchRadius = 220.0f;
+
+        TArray<FOverlapResult> Overlaps;
+        FCollisionObjectQueryParams ObjQuery;
+        ObjQuery.AddObjectTypesToQuery(ECC_Pawn);
+        ObjQuery.AddObjectTypesToQuery(ECC_WorldDynamic);
+
+        FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(ResolvePreviewInteractionUnderCursor), false, SourceEnemy);
+        const bool bOverlap = GetWorld()->OverlapMultiByObjectType(
+            Overlaps,
+            SearchOrigin,
+            FQuat::Identity,
+            ObjQuery,
+            FCollisionShape::MakeSphere(SearchRadius),
+            QueryParams
+        );
+
+        if (bOverlap)
+        {
+            float BestDistSq = TNumericLimits<float>::Max();
+            AActor* BestActor = nullptr;
+
+            for (const FOverlapResult& It : Overlaps)
+            {
+                AActor* Candidate = It.GetActor();
+                if (!IsValidInteractionTarget(Candidate))
+                {
+                    continue;
+                }
+
+                FVector BoundsOrigin = FVector::ZeroVector;
+                FVector BoundsExtent = FVector::ZeroVector;
+                Candidate->GetActorBounds(true, BoundsOrigin, BoundsExtent);
+                const float DistSq = FVector::DistSquared2D(BoundsOrigin, SearchOrigin);
+
+                if (DistSq < BestDistSq)
+                {
+                    BestDistSq = DistSq;
+                    BestActor = Candidate;
+                }
+            }
+
+            HitActor = BestActor;
+        }
     }
 
-    const bool bIsEnemyTarget = Cast<AEnemyBase>(HitActor) != nullptr;
-    const bool bHasInteractionComp = HitActor->FindComponentByClass<UInteractionTargetComponent>() != nullptr;
-    if (!bIsEnemyTarget && !bHasInteractionComp)
+    if (!IsValidInteractionTarget(HitActor))
     {
-        return; // 场景普通物体，非可互动目标
+        return;
     }
 
     TArray<FInteractionActionOption> Candidates;

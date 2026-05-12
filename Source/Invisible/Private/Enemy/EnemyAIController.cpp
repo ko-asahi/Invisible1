@@ -19,9 +19,109 @@
 #include "Engine/GameInstance.h"
 #include "Invisible_GameModeBase.h"
 #include "Components/SceneComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Animation/AnimSequence.h"
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimInstance.h"
+#include "Data/SIZZ_CustomIndicatorRefreshValue.h"
+#include "Data/SIZZ_IndicatorBehaviourDefinition.h"
+#include "Decals/SIZZ_DecalBaseActor.h"
+#include "SpellIndicatorLibrary/SIZZ_SpellIndicatorLibrary.h"
+
+namespace
+{
+bool IsSafeIndicatorDefinition(const USIZZ_IndicatorBehaviourDefinition* IndicatorDefinition)
+{
+    return IndicatorDefinition
+        && IndicatorDefinition->IndicatorClassToSpawn
+        && IndicatorDefinition->IndicatorMaterial
+        && IndicatorDefinition->IndicatorAnimationCurve
+        && IndicatorDefinition->RefreshData
+        && IndicatorDefinition->RefreshData->RefreshValue > 0.0f;
+}
+
+bool IsControlledPawnSelectedInEditor(const AAIController* Controller)
+{
+#if WITH_EDITOR
+    if (!Controller)
+    {
+        return false;
+    }
+    const APawn* ControlledPawn = Controller->GetPawn();
+    return IsValid(ControlledPawn) ? ControlledPawn->IsSelectedInEditor() : false;
+#else
+    return false;
+#endif
+}
+
+ASIZZ_DecalBaseActor* SpawnIndicatorConeByReflection(
+    UObject* WorldObjContext,
+    USIZZ_IndicatorBehaviourDefinition* IndicatorDefinition,
+    const FVector& Position,
+    const FRotator& Rotation,
+    float Time,
+    float Height,
+    float Width,
+    bool bOffsetByWidth,
+    bool bFlipCone)
+{
+    UClass* LibraryClass = USIZZ_SpellIndicatorLibrary::StaticClass();
+    if (!LibraryClass)
+    {
+        return nullptr;
+    }
+
+    UFunction* SpawnFunc = LibraryClass->FindFunctionByName(TEXT("SpawnIndicatorCone"));
+    if (!SpawnFunc)
+    {
+        return nullptr;
+    }
+
+    struct FSpawnIndicatorConeParams
+    {
+        UObject* WorldObjContext = nullptr;
+        USIZZ_IndicatorBehaviourDefinition* IndicatorDefinition = nullptr;
+        FVector Position = FVector::ZeroVector;
+        FRotator Rotation = FRotator::ZeroRotator;
+        float Time = 1.0f;
+        float Height = 100.0f;
+        float Width = 100.0f;
+        bool bOffsetByWidth = true;
+        bool bFlipCone = false;
+        ASIZZ_DecalBaseActor* ReturnValue = nullptr;
+    };
+
+    FSpawnIndicatorConeParams Params;
+    Params.WorldObjContext = WorldObjContext;
+    Params.IndicatorDefinition = IndicatorDefinition;
+    Params.Position = Position;
+    Params.Rotation = Rotation;
+    Params.Time = Time;
+    Params.Height = Height;
+    Params.Width = Width;
+    Params.bOffsetByWidth = bOffsetByWidth;
+    Params.bFlipCone = bFlipCone;
+
+    UObject* LibraryCDO = LibraryClass->GetDefaultObject();
+    if (!LibraryCDO)
+    {
+        return nullptr;
+    }
+
+    LibraryCDO->ProcessEvent(SpawnFunc, &Params);
+    return Params.ReturnValue;
+}
+
+void SetIndicatorHiddenState(ASIZZ_DecalBaseActor* Indicator, bool bHidden)
+{
+    if (IsValid(Indicator))
+    {
+        Indicator->SetActorHiddenInGame(bHidden);
+        Indicator->SetActorEnableCollision(false);
+        Indicator->SetActorTickEnabled(false);
+    }
+}
+}
 
 // Blackboard 键名定义
 const FName AEnemyAIController::BB_TargetActor      = TEXT("TargetActor");
@@ -73,9 +173,128 @@ AEnemyAIController::AEnemyAIController()
     PerceptionComp->OnTargetPerceptionUpdated.AddDynamic(this, &AEnemyAIController::OnTargetPerceptionUpdated);
 }
 
+bool AEnemyAIController::ShouldShowSightIndicator() const
+{
+    if (!bEnableSightIndicator)
+    {
+        return false;
+    }
+
+    if (bOnlyShowSightIndicatorInEditor)
+    {
+#if WITH_EDITOR
+        return true;
+#else
+        return false;
+#endif
+    }
+
+    return true;
+}
+
+void AEnemyAIController::DestroySightIndicators()
+{
+    auto DestroyOne = [](TObjectPtr<ASIZZ_DecalBaseActor>& Indicator)
+    {
+        if (IsValid(Indicator))
+        {
+            Indicator->Destroy();
+        }
+        Indicator = nullptr;
+    };
+
+    DestroyOne(NearSightIndicatorActor);
+    DestroyOne(MidSightIndicatorActor);
+    DestroyOne(FarSightIndicatorActor);
+}
+
+void AEnemyAIController::CreateSightIndicators()
+{
+    DestroySightIndicators();
+
+    if (!ShouldShowSightIndicator())
+    {
+        return;
+    }
+
+    APawn* ControlledPawn = GetPawn();
+    if (!ControlledPawn)
+    {
+        return;
+    }
+
+    const FRotator SightRotation = ControlledPawn->GetActorRotation() + FRotator(0.0f, -90.0f, 0.0f);
+
+    auto SpawnConeIfValid = [this, ControlledPawn, SightRotation](USIZZ_IndicatorBehaviourDefinition* Definition, float Height) -> ASIZZ_DecalBaseActor*
+    {
+        if (!IsSafeIndicatorDefinition(Definition))
+        {
+            return nullptr;
+        }
+
+        const float SafeHeight = FMath::Max(Height, 1.0f);
+        const float VisualHalfAngle = FMath::Clamp(HalfViewAngle * FMath::Max(SightIndicatorHalfAngleScale, 0.1f), 1.0f, 89.0f);
+        const float HalfAngleRad = FMath::DegreesToRadians(VisualHalfAngle);
+        const float SafeWidth = FMath::Max(SafeHeight * FMath::Tan(HalfAngleRad), 1.0f);
+        const float Lifetime = FMath::Max(SightIndicatorLifetime, 0.1f);
+
+        ASIZZ_DecalBaseActor* Spawned = SpawnIndicatorConeByReflection(
+            this,
+            Definition,
+            ControlledPawn->GetActorLocation(),
+            SightRotation,
+            Lifetime,
+            SafeHeight,
+            SafeWidth,
+            true,
+            false);
+
+        return Spawned;
+    };
+
+    NearSightIndicatorActor = SpawnConeIfValid(NearSightIndicatorDefinition, NearRange);
+    MidSightIndicatorActor = SpawnConeIfValid(MidSightIndicatorDefinition, MidRange);
+    FarSightIndicatorActor = SpawnConeIfValid(FarSightIndicatorDefinition, FarRange);
+
+    UpdateSightIndicatorsTransform();
+    if (bHideSightIndicatorWhenNoVisualContact)
+    {
+        SetIndicatorHiddenState(NearSightIndicatorActor, true);
+        SetIndicatorHiddenState(MidSightIndicatorActor, true);
+        SetIndicatorHiddenState(FarSightIndicatorActor, true);
+    }
+}
+
+void AEnemyAIController::UpdateSightIndicatorsTransform() const
+{
+    APawn* ControlledPawn = GetPawn();
+    if (!ControlledPawn || !ShouldShowSightIndicator())
+    {
+        return;
+    }
+
+    const FVector PawnLocation = ControlledPawn->GetActorLocation();
+    const FRotator PawnRotation = ControlledPawn->GetActorRotation() + FRotator(0.0f, -90.0f, 0.0f);
+
+    auto UpdateOne = [&PawnLocation, &PawnRotation](ASIZZ_DecalBaseActor* Indicator)
+    {
+        if (IsValid(Indicator))
+        {
+            Indicator->SetActorLocation(PawnLocation);
+            Indicator->SetActorRotation(PawnRotation);
+        }
+    };
+
+    UpdateOne(NearSightIndicatorActor);
+    UpdateOne(MidSightIndicatorActor);
+    UpdateOne(FarSightIndicatorActor);
+}
+
 void AEnemyAIController::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
+
+    UpdateSightIndicatorsTransform();
 
     if (bInjectedPathTurnInProgress)
     {
@@ -136,8 +355,8 @@ void AEnemyAIController::OnPossess(APawn* InPawn)
 
     // 获取互动时转向速度
     InteractionTurnSpeed = FMath::Max(Enemy->InteractionTurnSpeed, 0.0f);
-    InjectedPathTurnAnim = Enemy->InjectedPathTurnAnim;
-    InjectedPathTurnSplitNormalizedTime = FMath::Clamp(Enemy->InjectedPathTurnSplitNormalizedTime, 0.05f, 0.95f);
+    InjectedPathTurnRightAnim = Enemy->InjectedPathTurnRightAnim;
+    InjectedPathTurnLeftAnim = Enemy->InjectedPathTurnLeftAnim;
     InjectedPathTurnMinAngle = FMath::Max(Enemy->InjectedPathTurnMinAngle, 0.0f);
     InjectedPathTurnPlayRate = FMath::Max(Enemy->InjectedPathTurnPlayRate, 0.1f);
     InjectedPathTurnMaxWaitTime = FMath::Max(Enemy->InjectedPathTurnMaxWaitTime, 0.1f);
@@ -227,6 +446,7 @@ void AEnemyAIController::OnPossess(APawn* InPawn)
     InitAIStateTags();
 
     Enemy->SetAIStateTag(Tag_AI_Idle);
+    CreateSightIndicators();
 }
 
 // 停止定时视野检测
@@ -245,6 +465,7 @@ void AEnemyAIController::OnUnPossess()
     StopDialogueRefreshLoop();
     ClearDialogueBubbleDelayTimers();
     ClearSpecialObjectInteractionRuntimeFlags();
+    DestroySightIndicators();
     Super::OnUnPossess();
 }
 
@@ -416,6 +637,21 @@ void AEnemyAIController::TickDetection()
     // ===== 刺激检测 =====
     float Distance = 0.f;
     const bool bInSight = IsPlayerInFanSight(Distance);
+    if (bHideSightIndicatorWhenNoVisualContact)
+    {
+        const bool bSelectedOverride = bShowSightIndicatorWhenSelected && IsControlledPawnSelectedInEditor(this);
+        const bool bHide = !(bInSight || bSelectedOverride);
+        SetIndicatorHiddenState(NearSightIndicatorActor, bHide);
+        SetIndicatorHiddenState(MidSightIndicatorActor, bHide);
+        SetIndicatorHiddenState(FarSightIndicatorActor, bHide);
+    }
+    else
+    {
+        SetIndicatorHiddenState(NearSightIndicatorActor, false);
+        SetIndicatorHiddenState(MidSightIndicatorActor, false);
+        SetIndicatorHiddenState(FarSightIndicatorActor, false);
+    }
+
     const bool bHeardValid = bHasHeardStimulus && (NowTime - LastHeardGameTime <= HearingMaxAge);
     const bool bHasAnyStimulus = bInSight || bHeardValid;
     APlayerCharacter* Player = Cast<APlayerCharacter>(UGameplayStatics::GetPlayerCharacter(GetWorld(), 0));
@@ -806,7 +1042,14 @@ bool AEnemyAIController::ShouldPlayInjectedPathTurn(AEnemyBase* SelfEnemy, const
 
 float AEnemyAIController::PlayInjectedPathTurnAnimation(AEnemyBase* SelfEnemy, float DeltaYaw)
 {
-    if (!SelfEnemy || !InjectedPathTurnAnim)
+    if (!SelfEnemy)
+    {
+        return 0.0f;
+    }
+
+    // UE中 FindDeltaAngleDegrees 正值通常代表向左转，负值通常代表向右转。
+    UAnimSequence* SelectedAnim = DeltaYaw < 0.0f ? InjectedPathTurnRightAnim : InjectedPathTurnLeftAnim;
+    if (!SelectedAnim)
     {
         return 0.0f;
     }
@@ -824,7 +1067,7 @@ float AEnemyAIController::PlayInjectedPathTurnAnimation(AEnemyBase* SelfEnemy, f
     }
 
     UAnimMontage* DynamicMontage = UAnimMontage::CreateSlotAnimationAsDynamicMontage(
-        InjectedPathTurnAnim,
+        SelectedAnim,
         FName(TEXT("DefaultSlot")),
         0.1f,
         0.1f,
@@ -838,15 +1081,15 @@ float AEnemyAIController::PlayInjectedPathTurnAnimation(AEnemyBase* SelfEnemy, f
 
     InjectedPathTurnDynamicMontage = DynamicMontage;
 
-    const float ClipLength = FMath::Max(InjectedPathTurnAnim->GetPlayLength(), KINDA_SMALL_NUMBER);
-    const float SplitTime = FMath::Clamp(InjectedPathTurnSplitNormalizedTime, 0.05f, 0.95f) * ClipLength;
-    // UE中 FindDeltaAngleDegrees 正值通常代表向左转，这里按“右转=前半段”映射为负值。
-    const bool bTurnRight = DeltaYaw < 0.0f;
-    const float StartTime = bTurnRight ? 0.0f : SplitTime;
-    const float SegmentLength = bTurnRight ? SplitTime : (ClipLength - SplitTime);
-    const float SafeSegmentLength = FMath::Max(SegmentLength / FMath::Max(InjectedPathTurnPlayRate, KINDA_SMALL_NUMBER), 0.05f);
+    const float SafeSegmentLength = FMath::Max(
+        SelectedAnim->GetPlayLength() / FMath::Max(InjectedPathTurnPlayRate, KINDA_SMALL_NUMBER),
+        0.05f);
 
-    const float PlayedLen = AnimInstance->Montage_Play(DynamicMontage, InjectedPathTurnPlayRate, EMontagePlayReturnType::MontageLength, StartTime);
+    const float PlayedLen = AnimInstance->Montage_Play(
+        DynamicMontage,
+        InjectedPathTurnPlayRate,
+        EMontagePlayReturnType::MontageLength,
+        0.0f);
     if (PlayedLen <= 0.0f)
     {
         InjectedPathTurnDynamicMontage = nullptr;
@@ -1276,15 +1519,6 @@ void AEnemyAIController::BeginPendingInteractionLoop()
     AActor* TargetActor = PendingInteractionContext.TargetActor.Get();
     AEnemyBase* SelfEnemy = Cast<AEnemyBase>(GetPawn());
 
-    // 清除目标AI的外部等待锁
-    if (AEnemyBase* TargetEnemy = Cast<AEnemyBase>(TargetActor))
-    {
-        if (AEnemyAIController* TargetCtrl = Cast<AEnemyAIController>(TargetEnemy->GetController()))
-        {
-            TargetCtrl->ClearExternalApproachHold();
-        }
-    }
-
     if(!TargetActor || !SelfEnemy)
     {
         FinishPendingInteraction();
@@ -1300,7 +1534,9 @@ void AEnemyAIController::BeginPendingInteractionLoop()
     }
     const bool bIsChatLike = IsChatLikeInteraction(ActionTag);
 
+    CacheSleepReturnTransformIfNeeded(SelfEnemy, ActionTag);
     SnapToObjectInteractionAnchor(SelfEnemy, TargetActor, ActionTag);
+    ApplySleepPoseIfNeeded(SelfEnemy, ActionTag);
     ApplySpecialObjectInteractionRuntimeFlags(SelfEnemy, ActionTag);
 
     // 互动期间停止移动，但不关闭检测
@@ -1374,6 +1610,7 @@ void AEnemyAIController::FinishPendingInteraction()
 {
     AActor* TargetActor = PendingInteractionTarget.Get();
     const FGameplayTag BehaviorTag = PendingInteractionBehaviorTag;
+    AEnemyBase* SelfEnemy = Cast<AEnemyBase>(GetPawn());
 
     BP_OnPendingInteractionFinished(TargetActor, BehaviorTag);
 
@@ -1407,12 +1644,12 @@ void AEnemyAIController::FinishPendingInteraction()
     // 释放自身（源AI）锁，清理上下文
     SetForcedInteractionStateTag(false, FGameplayTag());
     ClearSpecialObjectInteractionRuntimeFlags();
+    RestoreSleepPoseAndReturnIfNeeded(SelfEnemy, BehaviorTag);
     StopDialogueRefreshLoop();
     ClearPendingInteraction();
     GetWorldTimerManager().ClearTimer(InteractionFacingTimerHandle);
 
     // 清理并隐藏头顶文本
-    AEnemyBase* SelfEnemy = Cast<AEnemyBase>(GetPawn());
     ClearDialogueBubbleDelayTimers();
     HideInteractionDialogueBubble(SelfEnemy, TargetActor);
 
@@ -1438,6 +1675,7 @@ void AEnemyAIController::InterruptPendingInteractionForAlert()
 
     AActor* TargetActor = PendingInteractionTarget.Get();
     const FGameplayTag BehaviorTag = PendingInteractionBehaviorTag;
+    AEnemyBase* SelfEnemy = Cast<AEnemyBase>(GetPawn());
 
     // 清除互动计时器，避免后续又触发“正常结束”
     GetWorldTimerManager().ClearTimer(PendingInteractionTimerHandle);
@@ -1476,12 +1714,12 @@ void AEnemyAIController::InterruptPendingInteractionForAlert()
     // 释放自身（源AI）锁，清理上下文
     SetForcedInteractionStateTag(false, FGameplayTag());
     ClearSpecialObjectInteractionRuntimeFlags();
+    RestoreSleepPoseAndReturnIfNeeded(SelfEnemy, BehaviorTag);
     StopDialogueRefreshLoop();
     // 清理互动运行态（会把 bIsRunningPendingInteraction 置 false）
     ClearPendingInteraction();
 
     // 清理并隐藏头顶文本
-    AEnemyBase* SelfEnemy = Cast<AEnemyBase>(GetPawn());
     ClearDialogueBubbleDelayTimers();
     HideInteractionDialogueBubble(SelfEnemy, TargetActor);
 
@@ -1677,9 +1915,25 @@ void AEnemyAIController::ApplySpecialObjectInteractionRuntimeFlags(AEnemyBase* S
         LastHeardLocation = FVector::ZeroVector;
         LastHeardGameTime = -1.0f;
     }
+    else if (IsBrawlInteraction(ActionTag))
+    {
+        // 斗殴期间临时关闭感知，避免被外部刺激打断动作状态
+        bInteractionDisableAllSenses = true;
+        Alertness = 0.0f;
+        bHasHeardStimulus = false;
+        LastHeardLocation = FVector::ZeroVector;
+        LastHeardGameTime = -1.0f;
+    }
     else if (IsSitInteraction(ActionTag))
     {
         bInteractionSuppressInterestUntilChase = true;
+    }
+
+    // 听觉感知组件在斗殴/睡觉期间临时关闭，结束后按配置恢复
+    if (PerceptionComp)
+    {
+        PerceptionComp->SetSenseEnabled(UAISense_Hearing::StaticClass(), !bInteractionDisableAllSenses && bEnableHearing);
+        PerceptionComp->RequestStimuliListenerUpdate();
     }
 
     if (UBlackboardComponent* BB = GetBlackboardComponent())
@@ -1700,6 +1954,12 @@ void AEnemyAIController::ClearSpecialObjectInteractionRuntimeFlags()
 {
     bInteractionDisableAllSenses = false;
     bInteractionSuppressInterestUntilChase = false;
+
+    if (PerceptionComp)
+    {
+        PerceptionComp->SetSenseEnabled(UAISense_Hearing::StaticClass(), bEnableHearing);
+        PerceptionComp->RequestStimuliListenerUpdate();
+    }
 }
 
 void AEnemyAIController::SnapToObjectInteractionAnchor(AEnemyBase* SelfEnemy, AActor* TargetActor, const FGameplayTag& ActionTag) const
@@ -1716,6 +1976,7 @@ void AEnemyAIController::SnapToObjectInteractionAnchor(AEnemyBase* SelfEnemy, AA
 
     FVector SnapLocation = TargetActor->GetActorLocation();
     FRotator SnapRotation = SelfEnemy->GetActorRotation();
+    bool bFoundAnchor = false;
 
     TArray<USceneComponent*> SceneComponents;
     TargetActor->GetComponents<USceneComponent>(SceneComponents);
@@ -1730,17 +1991,118 @@ void AEnemyAIController::SnapToObjectInteractionAnchor(AEnemyBase* SelfEnemy, AA
         {
             SnapLocation = SceneComp->GetComponentLocation();
             SnapRotation = SceneComp->GetComponentRotation();
+            bFoundAnchor = true;
             break;
         }
     }
 
-    // 没有锚点时，使用目标物体朝向，避免坐下/躺下时朝向随机。
-    if (SnapRotation.IsNearlyZero())
+    if (!bFoundAnchor)
     {
+        FVector BoundsOrigin = FVector::ZeroVector;
+        FVector BoundsExtent = FVector::ZeroVector;
+        TargetActor->GetActorBounds(true, BoundsOrigin, BoundsExtent);
+
+        const float CapsuleHalfHeight = SelfEnemy->GetSimpleCollisionHalfHeight();
+        SnapLocation = FVector(
+            BoundsOrigin.X,
+            BoundsOrigin.Y,
+            BoundsOrigin.Z + BoundsExtent.Z + CapsuleHalfHeight + 2.0f
+        );
         SnapRotation = TargetActor->GetActorRotation();
     }
 
-    SelfEnemy->TeleportTo(SnapLocation, FRotator(0.0f, SnapRotation.Yaw, 0.0f), false, true);
+    const FRotator FinalRotation(0.0f, SnapRotation.Yaw, 0.0f);
+    const bool bTeleported = SelfEnemy->TeleportTo(SnapLocation, FinalRotation, false, true);
+    if (!bTeleported)
+    {
+        SelfEnemy->SetActorLocationAndRotation(
+            SnapLocation,
+            FinalRotation,
+            false,
+            nullptr,
+            ETeleportType::TeleportPhysics
+        );
+    }
+}
+
+void AEnemyAIController::CacheSleepReturnTransformIfNeeded(AEnemyBase* SelfEnemy, const FGameplayTag& ActionTag)
+{
+    if (!SelfEnemy || !IsSleepInteraction(ActionTag))
+    {
+        return;
+    }
+
+    SleepReturnWorldLocation = SelfEnemy->GetActorLocation();
+    SleepReturnWorldRotation = SelfEnemy->GetActorRotation();
+
+    if (USkeletalMeshComponent* MeshComp = SelfEnemy->GetMesh())
+    {
+        SleepOriginalMeshRelativeLocation = MeshComp->GetRelativeLocation();
+        SleepOriginalMeshRelativeRotation = MeshComp->GetRelativeRotation();
+    }
+
+    bSleepPoseApplied = false;
+}
+
+void AEnemyAIController::ApplySleepPoseIfNeeded(AEnemyBase* SelfEnemy, const FGameplayTag& ActionTag)
+{
+    if (!SelfEnemy || !IsSleepInteraction(ActionTag))
+    {
+        return;
+    }
+
+    USkeletalMeshComponent* MeshComp = SelfEnemy->GetMesh();
+    if (!MeshComp)
+    {
+        return;
+    }
+
+    FRotator SleepMeshRotation = SleepOriginalMeshRelativeRotation;
+    SleepMeshRotation.Roll += SleepLieRollDegrees;
+    SleepMeshRotation.Normalize();
+
+    FVector SleepMeshLocation = SleepOriginalMeshRelativeLocation;
+    SleepMeshLocation.X += SleepLieMeshHorizontalOffset.X;
+    SleepMeshLocation.Y += SleepLieMeshHorizontalOffset.Y;
+    SleepMeshLocation.Z += SleepLieMeshZOffset;
+
+    MeshComp->SetRelativeRotation(SleepMeshRotation);
+    MeshComp->SetRelativeLocation(SleepMeshLocation);
+    bSleepPoseApplied = true;
+}
+
+void AEnemyAIController::RestoreSleepPoseAndReturnIfNeeded(AEnemyBase* SelfEnemy, const FGameplayTag& ActionTag)
+{
+    if (!SelfEnemy)
+    {
+        return;
+    }
+
+    const bool bWasSleepInteraction = IsSleepInteraction(ActionTag) || bSleepPoseApplied;
+    if (!bWasSleepInteraction)
+    {
+        return;
+    }
+
+    if (USkeletalMeshComponent* MeshComp = SelfEnemy->GetMesh())
+    {
+        MeshComp->SetRelativeRotation(SleepOriginalMeshRelativeRotation);
+        MeshComp->SetRelativeLocation(SleepOriginalMeshRelativeLocation);
+    }
+
+    const bool bTeleported = SelfEnemy->TeleportTo(SleepReturnWorldLocation, SleepReturnWorldRotation, false, true);
+    if (!bTeleported)
+    {
+        SelfEnemy->SetActorLocationAndRotation(
+            SleepReturnWorldLocation,
+            SleepReturnWorldRotation,
+            false,
+            nullptr,
+            ETeleportType::TeleportPhysics
+        );
+    }
+
+    bSleepPoseApplied = false;
 }
 
 // 应用互动朝向
@@ -1794,6 +2156,8 @@ void AEnemyAIController::ApplyInteractionStateLock(AEnemyBase* SelfEnemy, AActor
         {
             ActiveInteractionTargetController = TargetCtrl;
             TargetCtrl->SetForcedInteractionStateTag(true, ActionTag);
+            // 互动期间目标AI必须保持原地，避免巡逻移动与互动动画并发
+            TargetCtrl->SetExternalApproachHoldByActor(SelfEnemy);
         }
     }
     
@@ -2188,6 +2552,11 @@ void AEnemyAIController::UpdateAIStateTags()
 
     const float Speed2D = GetPawn() ? GetPawn()->GetVelocity().Size2D() : 0.f;
     const bool bIsMoving = Speed2D > 10.f;
+    const UPathFollowingComponent* PathFollowingComp = GetPathFollowingComponent();
+    const bool bIsPathFollowingActive =
+        PathFollowingComp &&
+        PathFollowingComp->GetStatus() != EPathFollowingStatus::Idle &&
+        PathFollowingComp->GetStatus() != EPathFollowingStatus::Paused;
 
     FGameplayTag NewTag = Tag_AI_Idle;
 
@@ -2204,7 +2573,7 @@ void AEnemyAIController::UpdateAIStateTags()
     {
         NewTag = Tag_AI_AlertMove;
     }
-    else if (bIsMoving)
+    else if (bIsMoving || bIsPathFollowingActive)
     {
         NewTag = Tag_AI_Patrol;
     }

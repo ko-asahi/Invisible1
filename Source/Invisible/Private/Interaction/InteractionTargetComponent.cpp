@@ -3,6 +3,7 @@
 
 #include "Interaction/InteractionTargetComponent.h"
 #include "Components/WidgetComponent.h"
+#include "Components/PrimitiveComponent.h"
 #include "Enemy/UI/AIInteractionButtonsWidget.h"
 #include "Enemy/EnemyBase.h"
 #include "GameFramework/Actor.h"
@@ -33,9 +34,9 @@ void UInteractionTargetComponent::BeginPlay()
 	RuntimeWidgetComp->SetupAttachment(Owner->GetRootComponent());
 	RuntimeWidgetComp->SetRelativeLocation(WidgetLocalOffset);
 	RuntimeWidgetComp->SetWidgetSpace(EWidgetSpace::Screen);
-	RuntimeWidgetComp->SetDrawAtDesiredSize(false);
-	RuntimeWidgetComp->SetDrawSize(FVector2D(500.f, 120.f));
-	RuntimeWidgetComp->SetPivot(FVector2D(0.5f, 0.0f));
+	RuntimeWidgetComp->SetDrawAtDesiredSize(bWidgetDrawAtDesiredSize);
+	RuntimeWidgetComp->SetDrawSize(WidgetDrawSize);
+	RuntimeWidgetComp->SetPivot(WidgetPivot);
 	RuntimeWidgetComp->SetVisibility(false);
 
 	// 将按键组件设置为运行时组件
@@ -44,6 +45,20 @@ void UInteractionTargetComponent::BeginPlay()
 		RuntimeWidgetComp->SetWidgetClass(InteractionButtonsWidgetClass);
 	}
 	RuntimeWidgetComp->RegisterComponent();
+
+	if (bDisableOwnerNavigationAffect)
+	{
+		TArray<UPrimitiveComponent*> PrimitiveComps;
+		Owner->GetComponents<UPrimitiveComponent>(PrimitiveComps);
+		for (UPrimitiveComponent* PrimComp : PrimitiveComps)
+		{
+			if (!PrimComp || PrimComp == RuntimeWidgetComp)
+			{
+				continue;
+			}
+			PrimComp->SetCanEverAffectNavigation(false);
+		}
+	}
 }
 
 

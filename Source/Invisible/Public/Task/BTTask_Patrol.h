@@ -6,13 +6,21 @@
 #include "BehaviorTree/BTTaskNode.h"
 #include "BTTask_Patrol.generated.h"
 
+class AEnemyAIController;
+class AEnemyBase;
+class UBlackboardComponent;
+struct FPatrolWaypointData;
+
 /**
- * 实现角色巡逻功能
+ * 沿 PatrolRouteProvider 样条连续巡逻，末端走回起点循环。
+ * 绘制路径 / 交互接近由 EnemyAIController 的 InjectedPath 系统负责，本任务仅管样条。
  */
 struct FBTTask_PatrolMemory
 {
-	FDelegateHandle MoveCompletedHandle;	// 移动完成回调句柄
-	FAIRequestID CurrentRequestID;		// 当前请求ID
+	float DistanceAlongRoute = 0.f;
+	float RouteLength = 0.f;
+	float CachedMaxWalkSpeed = -1.f;
+	bool bReturningToStart = false;
 };
 
 UCLASS()
@@ -23,26 +31,19 @@ class INVISIBLE_API UBTTask_Patrol : public UBTTaskNode
 public:
 	UBTTask_Patrol();
 
-	// 巡逻事件驱动执行
 	virtual EBTNodeResult::Type ExecuteTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory) override;
 
-	// 每帧检测 HasInterest，出现兴趣点时立刻中止移动
 	virtual void TickTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory, float DeltaSeconds) override;
 
-	// 任务结束时清理绑定（成功/失败/中止均会调用）
 	virtual void OnTaskFinished(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory, EBTNodeResult::Type TaskResult) override;
 
 	virtual uint16 GetInstanceMemorySize() const override;
 
 private:
-	// 到达巡逻点的接受半径
 	UPROPERTY(EditAnywhere, Category = "Patrol")
-	float AcceptanceRadius = 50.0f;
+	float PatrolSpeedScale = 1.0f;
 
-	
-
-	
-	
+	UPROPERTY(EditAnywhere, Category = "Patrol", meta=(ClampMin="5.0"))
+	float ReturnToStartAcceptanceRadius = 60.0f;
 };
-
 
