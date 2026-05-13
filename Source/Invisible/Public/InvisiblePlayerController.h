@@ -13,6 +13,8 @@
 
 #include "InvisiblePlayerController.generated.h"
 
+class AWaypoint;
+
 /**
  * 
  */
@@ -423,6 +425,15 @@ protected:
 
 	// 绘制路径
 	void DrawPathPoints(const TArray<FVector>& Points, const FColor& Color) const;
+
+	// 将心控路径生成为 Waypoint 链（巡逻已改为沿样条，WaypointClass 可留空以跳过生成）
+	UPROPERTY(EditAnywhere, Category = "EditMode|Path")
+	TSubclassOf<AWaypoint> WaypointClass;
+
+	UPROPERTY(EditAnywhere, Category = "EditMode|Path", meta = (ClampMin = "1.0"))
+	float WaypointSpawnSpacing = 50.0f;
+
+	void RebuildWaypointChainForEnemy(AEnemyBase* Enemy, const TArray<FVector>& PathPoints);
 
 	// 将预览路径终点XY吸附到预览目标中心（保留原终点Z）成功返回true
 	bool SnapPreviewPathEndToInteractionTargetXY();

@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "Enemy/PatrolPath.h"
+#include "Enemy/PatrolRouteProvider.h"
 #include "GameplayTagAssetInterface.h"
 #include "GameplayTagContainer.h"
 #include "Enemy/Interaction/AIInteractionTypes.h"
@@ -19,6 +20,7 @@ class UMotionWarpingComponent;
 class UAIInteractionButtonsWidget;
 class UAIDialogueBubbleWidget;
 class UAnimSequence;
+class AWaypoint;
 
 // 敌人警戒配置结构体
 USTRUCT(BlueprintType)
@@ -212,6 +214,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Patrol")
 	APatrolPath* AssignedPatrolPath = nullptr;
 
+    // RTSUnitTemplate 风格的巡逻链表起点
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Patrol|Waypoint")
+    AWaypoint* NextWaypoint = nullptr;
+
+    // 巡逻路径提供者（支持实现 PatrolRouteProvider 接口的任意 Actor，例如 Simple Path Tracer 示例蓝图）
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Patrol")
+    AActor* PatrolRouteProviderActor = nullptr;
+
 	// 当前目标巡逻点索引
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Patrol")
     int32 CurrentPatrolPointIndex = 0;
@@ -219,6 +229,11 @@ public:
 	// 巡逻速度
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Patrol")
 	float PatrolSpeed = 300.0f;
+
+    // 是否在每个巡逻点先原地转身再移动到下一个点
+    // 关闭后将直接进入 MoveTo，角色会在移动过程中转向
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Patrol")
+    bool bTurnInPlaceBeforePatrolMove = true;
 
 	// 视野半径
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI|Perception")
@@ -235,6 +250,54 @@ public:
 
 	// 获取下一个巡逻点
 	AActor* GetNextPatrolPoint();
+
+    // 推进到下一个 Waypoint
+    UFUNCTION(BlueprintCallable, Category="Patrol|Waypoint")
+    void AdvanceToNextWaypoint();
+
+    // 销毁当前 Waypoint 链并清空引用
+    UFUNCTION(BlueprintCallable, Category="Patrol|Waypoint")
+    void ClearAndDestroyWaypointChain();
+
+    // 是否绘制巡逻链调试连线
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Patrol|Waypoint")
+    bool bDebugDrawWaypointChain = false;
+
+    // 获取当前巡逻索引对应的目标位置（支持样条采样）
+    bool GetCurrentPatrolLocation(FVector& OutLocation) const;
+
+    // 获取巡逻执行路径点总数（支持样条采样）
+    int32 GetPatrolRoutePointCount() const;
+
+    // 获取全部采样路径点（用于预构建导航路径段）
+    void GetAllPatrolRoutePoints(TArray<FVector>& OutPoints) const;
+
+    // 获取巡逻路径总长度（样条模式）
+    bool GetPatrolRouteLength(float& OutLength) const;
+
+    // 按路径距离获取巡逻位置与朝向（样条模式）
+    bool GetPatrolRouteTransformAtDistance(float DistanceAlongRoute, FVector& OutLocation, FRotator& OutRotation) const;
+
+    // 将世界坐标投影到巡逻路径距离（样条模式）
+    bool ProjectWorldLocationToPatrolDistance(const FVector& WorldLocation, float& OutDistanceAlongRoute) const;
+
+    // 是否闭环路径
+    bool IsPatrolRouteClosedLoop() const;
+
+    // 根据当前巡逻索引获取行为数据（仅锚点触发）
+    FPatrolWaypointData GetCurrentPatrolBehaviorData(const FVector& ArrivedLocation) const;
+
+    // 获取行为锚点的中轴线朝向（用于 LookAround）
+    bool GetCurrentPatrolBehaviorAnchorYaw(const FVector& ArrivedLocation, float& OutYaw) const;
+
+    // 连续样条巡逻：刚触发过的行为锚点索引，离开锚区后由 UpdatePatrolBehaviorAnchorCooldown 清零
+    UPROPERTY()
+    int32 PatrolBehaviorCooldownSplinePointIndex = INDEX_NONE;
+
+    void UpdatePatrolBehaviorAnchorCooldown(const FVector& ActorWorldLocation);
+
+    UFUNCTION(BlueprintCallable, Category="Patrol")
+    bool TryGetNearestPatrolSplinePointIndex(const FVector& WorldLocation, int32& OutIndex, float& OutDistSq) const;
 
     // 敌人信息（使每个实例都能独立填写）
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Info")
@@ -334,13 +397,13 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction", meta = (ClampMin = "0.0"))
     float InteractionTurnSpeed = 180.0f;
 
-    // 注入路径起步转身动画（单段：前半右转，后半左转）
+    // 注入路径起步右转动画
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|InjectedPath|Turn")
-    UAnimSequence* InjectedPathTurnAnim = nullptr;
+    UAnimSequence* InjectedPathTurnRightAnim = nullptr;
 
-    // 单段动画左右切分点（0~1，默认0.5）
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|InjectedPath|Turn", meta=(ClampMin="0.05", ClampMax="0.95", UIMin="0.05", UIMax="0.95"))
-    float InjectedPathTurnSplitNormalizedTime = 0.5f;
+    // 注入路径起步左转动画
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|InjectedPath|Turn")
+    UAnimSequence* InjectedPathTurnLeftAnim = nullptr;
 
     // 起步前触发转身的最小角度（度）
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|InjectedPath|Turn", meta=(ClampMin="0.0", UIMin="0.0", UIMax="180.0"))
@@ -383,4 +446,9 @@ public:
         FInteractionActionOption ActionData,
         AEnemyBase* SourceAI,
         AActor* TargetActor);
+
+private:
+    void RegisterIgnoreCollisionWithOtherEnemies();
+
+    UObject* ResolvePatrolRouteProviderObject() const;
 };

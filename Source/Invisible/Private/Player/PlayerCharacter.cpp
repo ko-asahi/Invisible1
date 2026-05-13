@@ -12,6 +12,69 @@
 #include <Camera/CameraComponent.h>
 #include "Perception/AISense_Hearing.h"
 #include "Perception/AIPerceptionSystem.h"
+#include "Data/SIZZ_CustomIndicatorRefreshValue.h"
+#include "Data/SIZZ_IndicatorBehaviourDefinition.h"
+#include "Decals/SIZZ_DecalBaseActor.h"
+#include "SpellIndicatorLibrary/SIZZ_SpellIndicatorLibrary.h"
+
+namespace
+{
+bool IsSafeCircleDefinition(const USIZZ_IndicatorBehaviourDefinition* IndicatorDefinition)
+{
+	return IndicatorDefinition
+		&& IndicatorDefinition->IndicatorClassToSpawn
+		&& IndicatorDefinition->IndicatorMaterial
+		&& IndicatorDefinition->IndicatorAnimationCurve
+		&& IndicatorDefinition->RefreshData
+		&& IndicatorDefinition->RefreshData->RefreshValue > 0.0f;
+}
+
+ASIZZ_DecalBaseActor* SpawnIndicatorCircleByReflection(
+	UObject* WorldObjContext,
+	USIZZ_IndicatorBehaviourDefinition* IndicatorDefinition,
+	const FVector& Position,
+	float Time,
+	float Radius)
+{
+	UClass* LibraryClass = USIZZ_SpellIndicatorLibrary::StaticClass();
+	if (!LibraryClass)
+	{
+		return nullptr;
+	}
+
+	UFunction* SpawnFunc = LibraryClass->FindFunctionByName(TEXT("SpawnIndicatorCircle"));
+	if (!SpawnFunc)
+	{
+		return nullptr;
+	}
+
+	struct FSpawnIndicatorCircleParams
+	{
+		UObject* WorldObjContext = nullptr;
+		USIZZ_IndicatorBehaviourDefinition* IndicatorDefinition = nullptr;
+		FVector Position = FVector::ZeroVector;
+		float Time = 1.0f;
+		float Radius = 100.0f;
+		ASIZZ_DecalBaseActor* ReturnValue = nullptr;
+	};
+
+	FSpawnIndicatorCircleParams Params;
+	Params.WorldObjContext = WorldObjContext;
+	Params.IndicatorDefinition = IndicatorDefinition;
+	Params.Position = Position;
+	Params.Time = Time;
+	Params.Radius = Radius;
+
+	UObject* LibraryCDO = LibraryClass->GetDefaultObject();
+	if (!LibraryCDO)
+	{
+		return nullptr;
+	}
+
+	LibraryCDO->ProcessEvent(SpawnFunc, &Params);
+	return Params.ReturnValue;
+}
+}
 
 // Sets default values
 APlayerCharacter::APlayerCharacter()
@@ -119,6 +182,12 @@ void APlayerCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		}
 	}
 
+	if (IsValid(ActiveNoiseCircleIndicator))
+	{
+		ActiveNoiseCircleIndicator->Destroy();
+		ActiveNoiseCircleIndicator = nullptr;
+	}
+
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -136,6 +205,7 @@ void APlayerCharacter::Tick(float DeltaTime)
 
 	// ===== 脚步声上报 =====
     ReportFootstepNoise(DeltaTime);
+	UpdateSizzNoiseIndicatorFollow();
 
 	// 声音圈更新
 	UpdateNoiseRingVisual(DeltaTime);
@@ -296,6 +366,8 @@ void APlayerCharacter::ReportFootstepNoise(float DeltaTime)
 	DrawHearingRange(NoiseProfile.Loudness, NoiseProfile.Interval);
 
 	if (CachedGlobalHearingRange <= 0.0f) return;
+	const float EffectiveRadius = CachedGlobalHearingRange * NoiseProfile.Loudness;
+	SpawnSizzNoiseIndicator(EffectiveRadius, NoiseCircleIndicatorDuration > 0.0f ? NoiseCircleIndicatorDuration : NoiseProfile.Interval);
 
 	UAISense_Hearing::ReportNoiseEvent(
 		GetWorld(),
@@ -305,6 +377,54 @@ void APlayerCharacter::ReportFootstepNoise(float DeltaTime)
 		CachedGlobalHearingRange,
 		FName("State.Movement.Footstep")
 	);
+}
+
+void APlayerCharacter::SpawnSizzNoiseIndicator(float EffectiveRadius, float Duration)
+{
+	if (!bEnableSizzNoiseIndicator)
+	{
+		return;
+	}
+
+	if (!IsSafeCircleDefinition(NoiseCircleIndicatorDefinition))
+	{
+		return;
+	}
+
+	if (EffectiveRadius <= 0.0f)
+	{
+		return;
+	}
+
+	if (IsValid(ActiveNoiseCircleIndicator))
+	{
+		ActiveNoiseCircleIndicator->Destroy();
+		ActiveNoiseCircleIndicator = nullptr;
+	}
+
+	const float SafeDuration = FMath::Max(Duration, 0.05f);
+	const float ScaledRadius = FMath::Max(EffectiveRadius * FMath::Max(NoiseCircleRadiusScale, 0.1f), 1.0f);
+	FVector FootLocation = GetActorLocation();
+	FootLocation.Z -= GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+
+	ActiveNoiseCircleIndicator = SpawnIndicatorCircleByReflection(
+		this,
+		NoiseCircleIndicatorDefinition,
+		FootLocation,
+		SafeDuration,
+		ScaledRadius);
+}
+
+void APlayerCharacter::UpdateSizzNoiseIndicatorFollow() const
+{
+	if (!IsValid(ActiveNoiseCircleIndicator))
+	{
+		return;
+	}
+
+	FVector FootLocation = GetActorLocation();
+	FootLocation.Z -= GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+	ActiveNoiseCircleIndicator->SetActorLocation(FootLocation);
 }
 
 

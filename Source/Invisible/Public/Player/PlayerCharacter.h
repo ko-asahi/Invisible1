@@ -15,6 +15,9 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "PlayerCharacter.generated.h"
 
+class ASIZZ_DecalBaseActor;
+class USIZZ_IndicatorBehaviourDefinition;
+
 // 噪声圈配置结构体
 USTRUCT()
 struct FNoiseProfile
@@ -189,6 +192,22 @@ public:
 	// 更新噪声圈
 	void UpdateNoiseRingVisual(float DeltaTime);
 
+	// 是否启用 SIZZ 声音圈可视化（脚步事件触发）
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Noise|Visual|SIZZ")
+	bool bEnableSizzNoiseIndicator = true;
+
+	// SIZZ 圆形指示器定义（建议使用插件 BPDA_SI_DEF_Circle* 样例）
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Noise|Visual|SIZZ")
+	USIZZ_IndicatorBehaviourDefinition* NoiseCircleIndicatorDefinition = nullptr;
+
+	// SIZZ 声音圈显示时长
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Noise|Visual|SIZZ", meta=(ClampMin="0.05"))
+	float NoiseCircleIndicatorDuration = 0.25f;
+
+	// 半径修正系数（插件圆形投射与实际听觉半径可能有比例差）
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Noise|Visual|SIZZ", meta=(ClampMin="0.1"))
+	float NoiseCircleRadiusScale = 2.0f;
+
 	// 通过Tag获取噪声圈参数
 	bool ResolveNoiseProfileByTag(FNoiseProfile& OutProfile) const;
 
@@ -227,6 +246,12 @@ private:
 
 	// 运行时缓存的全局听觉范围（由 GameState 广播驱动）
 	float CachedGlobalHearingRange = 0.0f;
+
+	UPROPERTY(Transient)
+	TObjectPtr<ASIZZ_DecalBaseActor> ActiveNoiseCircleIndicator = nullptr;
+
+	void SpawnSizzNoiseIndicator(float EffectiveRadius, float Duration);
+	void UpdateSizzNoiseIndicatorFollow() const;
 
 
 };

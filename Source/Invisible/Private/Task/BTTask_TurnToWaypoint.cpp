@@ -20,16 +20,29 @@ UBTTask_TurnToWaypoint::UBTTask_TurnToWaypoint()
 EBTNodeResult::Type UBTTask_TurnToWaypoint::ExecuteTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory)
 {
 	AAIController* AIController = OwnerComp.GetAIOwner();
+    // UE_LOG(LogTemp, Warning, TEXT("[TurnToWaypoint] ExecuteTask entered. AIController=%s"), *GetNameSafe(AIController));
 	AEnemyBase* Enemy = AIController ? Cast<AEnemyBase>(AIController->GetPawn()) : nullptr;
-	if (!AIController || !Enemy || !Enemy->AssignedPatrolPath || Enemy->AssignedPatrolPath->Num() == 0)
+    const int32 RoutePointCount = Enemy ? Enemy->GetPatrolRoutePointCount() : 0;
+	if (!AIController || !Enemy || RoutePointCount == 0)
 	{
+        // UE_LOG(LogTemp, Warning, TEXT("[TurnToWaypoint] Failed precheck. Enemy=%s RoutePointCount=%d"), *GetNameSafe(Enemy), RoutePointCount);
 		return EBTNodeResult::Failed;
 	}
 
-	AActor* TargetPoint = Enemy->GetNextPatrolPoint();
-	if (!TargetPoint) return EBTNodeResult::Failed;
+    FVector TargetLocation = FVector::ZeroVector;
+    if (!Enemy->GetCurrentPatrolLocation(TargetLocation))
+    {
+        // UE_LOG(LogTemp, Warning, TEXT("[TurnToWaypoint] Cannot get patrol location. Enemy=%s"), *GetNameSafe(Enemy));
+        return EBTNodeResult::Failed;
+    }
 
 	FBTTask_TurnToWaypointMemory* Memory = reinterpret_cast<FBTTask_TurnToWaypointMemory*>(NodeMemory);
+
+    // 可配置：关闭原地预转身后，直接进入 MoveTo 阶段，边走边转
+    if (!Enemy->bTurnInPlaceBeforePatrolMove)
+    {
+        return EBTNodeResult::Succeeded;
+    }
 
 
 	// 预转身阶段：停下并关闭“随移动转向”
@@ -42,7 +55,7 @@ EBTNodeResult::Type UBTTask_TurnToWaypoint::ExecuteTask(UBehaviorTreeComponent& 
 	AIController->StopMovement();
 	Enemy->GetCharacterMovement()->StopMovementImmediately();
 
-	const FVector ToTarget = (TargetPoint->GetActorLocation() - Enemy->GetActorLocation()).GetSafeNormal2D();
+	const FVector ToTarget = (TargetLocation - Enemy->GetActorLocation()).GetSafeNormal2D();
 	if (ToTarget.IsNearlyZero())
 	{
 		return EBTNodeResult::Succeeded;

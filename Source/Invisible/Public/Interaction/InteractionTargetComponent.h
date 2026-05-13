@@ -55,6 +55,22 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Interaction")
 	FVector WidgetLocalOffset = FVector(0.0f, 0.0f, 100.0f);
 
+	// 是否按内容自适应大小（建议开启，避免大面积空白背景）
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Interaction")
+	bool bWidgetDrawAtDesiredSize = true;
+
+	// 当关闭自适应时使用的固定尺寸
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Interaction", meta=(EditCondition="!bWidgetDrawAtDesiredSize", EditConditionHides))
+	FVector2D WidgetDrawSize = FVector2D(360.0f, 96.0f);
+
+	// 按键组件 Pivot（默认顶部中点对齐）
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI|Interaction")
+	FVector2D WidgetPivot = FVector2D(0.5f, 0.0f);
+
+	// 关闭后可避免物体阻塞附近导航网格（推荐给床椅）
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction|Navigation")
+	bool bDisableOwnerNavigationAffect = true;
+
 	// 点击选择的交互行为
 	UPROPERTY(BlueprintAssignable, Category = "Interaction")
 	FOnAIInteractionActionClicked OnInteractionActionChosen;

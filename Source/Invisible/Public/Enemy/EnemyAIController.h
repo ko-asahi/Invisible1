@@ -15,6 +15,8 @@
 class APlayerCharacter;
 class UAnimSequence;
 class UAnimMontage;
+class ASIZZ_DecalBaseActor;
+class USIZZ_IndicatorBehaviourDefinition;
 
 // 广播事件结束信息
 DECLARE_MULTICAST_DELEGATE_FourParams(
@@ -108,6 +110,18 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction|Object")
     FName ObjectInteractionAnchorComponentName = TEXT("AIInteractionAnchor");
 
+    // 睡觉横躺时模型的 Roll 角度（默认 90 度）
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction|Sleep")
+    float SleepLieRollDegrees = 90.0f;
+
+    // 睡觉横躺时模型局部 Z 轴高度偏移
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction|Sleep")
+    float SleepLieMeshZOffset = 0.0f;
+
+    // 睡觉横躺时模型局部水平偏移（X=前后，Y=左右）
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Interaction|Sleep")
+    FVector2D SleepLieMeshHorizontalOffset = FVector2D::ZeroVector;
+
     // 中断当前待执行互动
     void InterruptPendingInteractionForAlert();
 
@@ -138,7 +152,7 @@ private:
     // 互动时转向速度（从 EnemyBase 获取）
     float InteractionTurnSpeed = 360.0f;
 
-    // 睡觉期间：关闭视觉/听觉处理与兴趣状态写入
+    // 睡觉/斗殴期间：关闭视觉/听觉处理与兴趣状态写入
     bool bInteractionDisableAllSenses = false;
 
     // 坐下期间：警戒值达到打探阈值前，抑制兴趣状态激活
@@ -190,6 +204,15 @@ private:
 
     // 睡觉/坐下时将AI瞬移到物体交互点（锚点优先）
     void SnapToObjectInteractionAnchor(AEnemyBase* SelfEnemy, AActor* TargetActor, const FGameplayTag& ActionTag) const;
+
+    // 缓存睡觉回位信息（互动开始前）
+    void CacheSleepReturnTransformIfNeeded(AEnemyBase* SelfEnemy, const FGameplayTag& ActionTag);
+
+    // 应用睡觉横躺位姿（互动开始后）
+    void ApplySleepPoseIfNeeded(AEnemyBase* SelfEnemy, const FGameplayTag& ActionTag);
+
+    // 恢复睡觉位姿并回到互动开始前位置（互动结束/中断）
+    void RestoreSleepPoseAndReturnIfNeeded(AEnemyBase* SelfEnemy, const FGameplayTag& ActionTag);
 
 
     // 上下文检验（用于校验当前代码是否存在问题）
@@ -320,10 +343,11 @@ private:
     bool bInjectedPathSavedOrientRotationToMovement = true;
     float InjectedPathTurnMinAngle = 15.0f;
     float InjectedPathTurnPlayRate = 1.0f;
-    float InjectedPathTurnSplitNormalizedTime = 0.5f;
     float InjectedPathTurnMaxWaitTime = 1.2f;
     UPROPERTY()
-    UAnimSequence* InjectedPathTurnAnim = nullptr;
+    UAnimSequence* InjectedPathTurnRightAnim = nullptr;
+    UPROPERTY()
+    UAnimSequence* InjectedPathTurnLeftAnim = nullptr;
     UPROPERTY(Transient)
     UAnimMontage* InjectedPathTurnDynamicMontage = nullptr;
     FTimerHandle InjectedPathTurnTimerHandle;
@@ -356,6 +380,17 @@ private:
 
     // 待执行互动完成回调
     FDelegateHandle PendingInteractionApproachFinishedHandle;
+
+    // 睡觉位姿是否已应用
+    bool bSleepPoseApplied = false;
+
+    // 睡觉互动结束后回位点（互动开始前的世界位姿）
+    FVector SleepReturnWorldLocation = FVector::ZeroVector;
+    FRotator SleepReturnWorldRotation = FRotator::ZeroRotator;
+
+    // 睡觉横躺前模型相对变换缓存（用于恢复）
+    FVector SleepOriginalMeshRelativeLocation = FVector::ZeroVector;
+    FRotator SleepOriginalMeshRelativeRotation = FRotator::ZeroRotator;
 
     // 检查待执行互动是否有效
     bool HasValidPendingInteraction() const;
@@ -410,6 +445,20 @@ private:
     float SightRadius    = 1200.f;
 	
     float HalfViewAngle  = 60.f;   // 半视角，总视角 = 2 * HalfViewAngle
+
+    UPROPERTY(Transient)
+    TObjectPtr<ASIZZ_DecalBaseActor> NearSightIndicatorActor = nullptr;
+
+    UPROPERTY(Transient)
+    TObjectPtr<ASIZZ_DecalBaseActor> MidSightIndicatorActor = nullptr;
+
+    UPROPERTY(Transient)
+    TObjectPtr<ASIZZ_DecalBaseActor> FarSightIndicatorActor = nullptr;
+
+    bool ShouldShowSightIndicator() const;
+    void CreateSightIndicators();
+    void UpdateSightIndicatorsTransform() const;
+    void DestroySightIndicators();
 
     bool bIsAIPaused = false;    // 是否暂停AI
 
@@ -490,6 +539,37 @@ public:
 
     UFUNCTION(BlueprintPure, Category = "AI|Perception|Hearing")
     float GetHearingRange() const { return HearingRange; }
+
+    // ===== 视野可视化（SIZZ）=====
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Perception|VisualIndicator")
+    bool bEnableSightIndicator = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Perception|VisualIndicator")
+    bool bOnlyShowSightIndicatorInEditor = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Perception|VisualIndicator")
+    USIZZ_IndicatorBehaviourDefinition* NearSightIndicatorDefinition = nullptr;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Perception|VisualIndicator")
+    USIZZ_IndicatorBehaviourDefinition* MidSightIndicatorDefinition = nullptr;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Perception|VisualIndicator")
+    USIZZ_IndicatorBehaviourDefinition* FarSightIndicatorDefinition = nullptr;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Perception|VisualIndicator", meta=(ClampMin="0.1"))
+    float SightIndicatorLifetime = 99999.0f;
+
+    // 视野可视化角度缩放（>1 会增大显示扇形角度，便于与实际判定对齐）
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Perception|VisualIndicator", meta=(ClampMin="0.1", UIMin="0.5", UIMax="2.0"))
+    float SightIndicatorHalfAngleScale = 1.2f;
+
+    // 未看到玩家时是否隐藏视野可视化（与简易版行为一致）
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Perception|VisualIndicator")
+    bool bHideSightIndicatorWhenNoVisualContact = true;
+
+    // 编辑器中选中该 AI（Pawn）时，也强制显示视野范围
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Perception|VisualIndicator")
+    bool bShowSightIndicatorWhenSelected = true;
 
     // MoveTO 后，清除运行时状态
     UFUNCTION(BlueprintCallable, Category="AI|Perception|Investigate")

@@ -2,6 +2,7 @@
 #include "Enemy/EnemyBase.h"
 #include "Enemy/EnemyAIController.h"
 #include "Enemy/PatrolPath.h"
+#include "Enemy/PatrolRouteProvider.h"
 #include "Enemy/Trait/TraitDefinition.h"
 #include "Enemy/Trait/TraitSubsystem.h"
 #include "Engine/GameInstance.h"
@@ -12,8 +13,13 @@
 #include "Enemy/UI/AIInteractionButtonsWidget.h"
 #include "Enemy/UI/AIDialogueBubbleWidget.h"
 #include "MotionWarpingComponent.h"
+#include "Components/ActorComponent.h"
+#include "Actors/Waypoint.h"
+#include "DrawDebugHelpers.h"
+#include "EngineUtils.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogAIEnemyInteractionDebug, Log, All);
+// DEFINE_LOG_CATEGORY_STATIC(LogAIPatrolRoute, Log, All);
 
 
 // Sets default values
@@ -75,6 +81,8 @@ void AEnemyBase::BeginPlay()
 {
 	Super::BeginPlay();
 
+    RegisterIgnoreCollisionWithOtherEnemies();
+
     // 初始化头顶按键
     if(InteractionButtonsWidgetClass && InteractionButtonsWidgetComp)
     {
@@ -96,6 +104,12 @@ void AEnemyBase::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+    if (bDebugDrawWaypointChain && IsValid(NextWaypoint) && IsValid(NextWaypoint->NextWaypoint))
+    {
+        const FVector Start = NextWaypoint->GetActorLocation() + FVector(0.f, 0.f, 20.f);
+        const FVector End = NextWaypoint->NextWaypoint->GetActorLocation() + FVector(0.f, 0.f, 20.f);
+        DrawDebugLine(GetWorld(), Start, End, FColor::Cyan, false, 0.f, 0, 2.f);
+    }
 }
 
 // Called to bind functionality to input
@@ -108,9 +122,304 @@ void AEnemyBase::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent
 // 获取下一个巡逻点
 AActor* AEnemyBase::GetNextPatrolPoint()
 {
+    if (IsValid(NextWaypoint))
+    {
+        return NextWaypoint;
+    }
+
 	if (!AssignedPatrolPath) return nullptr;
 
-	return AssignedPatrolPath->GetWaypoint(CurrentPatrolPointIndex);
+    const int32 Count = AssignedPatrolPath->Num();
+    if (Count <= 0)
+    {
+        return nullptr;
+    }
+
+    const int32 SafeIndex = ((CurrentPatrolPointIndex % Count) + Count) % Count;
+	return AssignedPatrolPath->GetWaypoint(SafeIndex);
+}
+
+void AEnemyBase::AdvanceToNextWaypoint()
+{
+    if (IsValid(NextWaypoint))
+    {
+        NextWaypoint = NextWaypoint->NextWaypoint;
+    }
+}
+
+void AEnemyBase::ClearAndDestroyWaypointChain()
+{
+    if (!IsValid(NextWaypoint))
+    {
+        return;
+    }
+
+    TSet<AWaypoint*> Visited;
+    AWaypoint* Cursor = NextWaypoint;
+    while (IsValid(Cursor) && !Visited.Contains(Cursor))
+    {
+        Visited.Add(Cursor);
+        AWaypoint* Next = Cursor->NextWaypoint;
+        Cursor->NextWaypoint = nullptr;
+        Cursor->Destroy();
+        Cursor = Next;
+    }
+
+    NextWaypoint = nullptr;
+}
+
+bool AEnemyBase::GetCurrentPatrolLocation(FVector& OutLocation) const
+{
+    UObject* ProviderObject = ResolvePatrolRouteProviderObject();
+    if (!ProviderObject)
+    {
+        // UE_LOG(LogAIPatrolRoute, Warning, TEXT("[%s] Patrol provider not resolved."), *GetNameSafe(this));
+        // UE_LOG(LogTemp, Warning, TEXT("[PatrolRoute] %s provider unresolved. PatrolRouteProviderActor=%s AssignedPatrolPath=%s"),
+        //     *GetNameSafe(this), *GetNameSafe(PatrolRouteProviderActor), *GetNameSafe(AssignedPatrolPath));
+        return false;
+    }
+
+    const int32 RoutePointCount = IPatrolRouteProvider::Execute_GetProviderRoutePointCount(ProviderObject);
+    if (RoutePointCount <= 0)
+    {
+        // UE_LOG(LogAIPatrolRoute, Warning, TEXT("[%s] RoutePointCount <= 0. Provider=%s"), *GetNameSafe(this), *GetNameSafe(Cast<UObject>(ProviderObject)));
+        // UE_LOG(LogTemp, Warning, TEXT("[PatrolRoute] %s provider=%s RoutePointCount=%d"),
+        //     *GetNameSafe(this), *GetNameSafe(Cast<UObject>(ProviderObject)), RoutePointCount);
+        return false;
+    }
+
+    const int32 SafeIndex = ((CurrentPatrolPointIndex % RoutePointCount) + RoutePointCount) % RoutePointCount;
+    return IPatrolRouteProvider::Execute_GetProviderRoutePoint(ProviderObject, SafeIndex, OutLocation);
+}
+
+int32 AEnemyBase::GetPatrolRoutePointCount() const
+{
+    UObject* ProviderObject = ResolvePatrolRouteProviderObject();
+    if (!ProviderObject)
+    {
+        // UE_LOG(LogAIPatrolRoute, Warning, TEXT("[%s] GetPatrolRoutePointCount failed: provider not resolved."), *GetNameSafe(this));
+        // UE_LOG(LogTemp, Warning, TEXT("[PatrolRoute] %s GetPatrolRoutePointCount failed: provider unresolved."), *GetNameSafe(this));
+        return 0;
+    }
+
+    const int32 Count = IPatrolRouteProvider::Execute_GetProviderRoutePointCount(ProviderObject);
+    // UE_LOG(LogTemp, Warning, TEXT("[PatrolRoute] %s provider=%s count=%d"), *GetNameSafe(this), *GetNameSafe(Cast<UObject>(ProviderObject)), Count);
+    return Count;
+}
+
+void AEnemyBase::GetAllPatrolRoutePoints(TArray<FVector>& OutPoints) const
+{
+    OutPoints.Reset();
+    UObject* ProviderObject = ResolvePatrolRouteProviderObject();
+    if (ProviderObject)
+    {
+        IPatrolRouteProvider::Execute_GetProviderRoutePoints(ProviderObject, OutPoints);
+    }
+}
+
+bool AEnemyBase::GetPatrolRouteLength(float& OutLength) const
+{
+    OutLength = 0.0f;
+
+    UObject* ProviderObject = ResolvePatrolRouteProviderObject();
+    if (!ProviderObject)
+    {
+        return false;
+    }
+
+    OutLength = IPatrolRouteProvider::Execute_GetProviderRouteLength(ProviderObject);
+    return OutLength > KINDA_SMALL_NUMBER;
+}
+
+bool AEnemyBase::GetPatrolRouteTransformAtDistance(float DistanceAlongRoute, FVector& OutLocation, FRotator& OutRotation) const
+{
+    UObject* ProviderObject = ResolvePatrolRouteProviderObject();
+    if (!ProviderObject)
+    {
+        return false;
+    }
+
+    return IPatrolRouteProvider::Execute_GetProviderRouteTransformAtDistance(
+        ProviderObject,
+        DistanceAlongRoute,
+        OutLocation,
+        OutRotation);
+}
+
+bool AEnemyBase::ProjectWorldLocationToPatrolDistance(const FVector& WorldLocation, float& OutDistanceAlongRoute) const
+{
+    UObject* ProviderObject = ResolvePatrolRouteProviderObject();
+    if (!ProviderObject)
+    {
+        return false;
+    }
+
+    return IPatrolRouteProvider::Execute_ProjectWorldLocationToRouteDistance(
+        ProviderObject,
+        WorldLocation,
+        OutDistanceAlongRoute);
+}
+
+bool AEnemyBase::IsPatrolRouteClosedLoop() const
+{
+    UObject* ProviderObject = ResolvePatrolRouteProviderObject();
+    if (!ProviderObject)
+    {
+        return false;
+    }
+
+    return IPatrolRouteProvider::Execute_IsProviderClosedLoop(ProviderObject);
+}
+
+FPatrolWaypointData AEnemyBase::GetCurrentPatrolBehaviorData(const FVector& ArrivedLocation) const
+{
+    FPatrolWaypointData Data;
+    Data.Behavior = EWaypointBehavior::None;
+    Data.WaitTime = 0.0f;
+
+    UObject* ProviderObject = ResolvePatrolRouteProviderObject();
+    if (!ProviderObject)
+    {
+        return Data;
+    }
+
+    EWaypointBehavior OutBehavior = EWaypointBehavior::None;
+    float OutWaitTime = 0.0f;
+    float OutLookAngle = 0.0f;
+    float OutLookSpeed = 0.0f;
+    bool bOutUseCustomLookCenter = false;
+    float OutLookCenterYawOffset = 0.0f;
+    float OutPreLookPauseTime = 0.0f;
+    IPatrolRouteProvider::Execute_GetProviderBehaviorDataForRoutePoint(
+        ProviderObject,
+        ArrivedLocation,
+        OutBehavior,
+        OutWaitTime,
+        OutLookAngle,
+        OutLookSpeed,
+        bOutUseCustomLookCenter,
+        OutLookCenterYawOffset,
+        OutPreLookPauseTime);
+
+    Data.Behavior = OutBehavior;
+    Data.WaitTime = OutWaitTime;
+    Data.LookAngle = OutLookAngle;
+    Data.LookSpeed = OutLookSpeed;
+    Data.bUseCustomLookCenter = bOutUseCustomLookCenter;
+    Data.LookCenterYawOffset = OutLookCenterYawOffset;
+    Data.PreLookPauseTime = OutPreLookPauseTime;
+    Data.Point = nullptr;
+    return Data;
+}
+
+bool AEnemyBase::GetCurrentPatrolBehaviorAnchorYaw(const FVector& ArrivedLocation, float& OutYaw) const
+{
+    UObject* ProviderObject = ResolvePatrolRouteProviderObject();
+    if (!ProviderObject)
+    {
+        return false;
+    }
+
+    return IPatrolRouteProvider::Execute_GetProviderBehaviorAnchorYawForRoutePoint(ProviderObject, ArrivedLocation, OutYaw);
+}
+
+void AEnemyBase::RegisterIgnoreCollisionWithOtherEnemies()
+{
+    UWorld* World = GetWorld();
+    if (!World)
+    {
+        return;
+    }
+
+    UCapsuleComponent* MyCapsule = GetCapsuleComponent();
+    if (!MyCapsule)
+    {
+        return;
+    }
+
+    for (TActorIterator<AEnemyBase> It(World); It; ++It)
+    {
+        AEnemyBase* Other = *It;
+        if (!Other || Other == this)
+        {
+            continue;
+        }
+
+        UCapsuleComponent* OtherCapsule = Other->GetCapsuleComponent();
+        if (!OtherCapsule)
+        {
+            continue;
+        }
+
+        MyCapsule->IgnoreActorWhenMoving(Other, true);
+        OtherCapsule->IgnoreActorWhenMoving(this, true);
+    }
+}
+
+void AEnemyBase::UpdatePatrolBehaviorAnchorCooldown(const FVector& ActorWorldLocation)
+{
+    const FPatrolWaypointData Data = GetCurrentPatrolBehaviorData(ActorWorldLocation);
+    if (Data.Behavior == EWaypointBehavior::None)
+    {
+        PatrolBehaviorCooldownSplinePointIndex = INDEX_NONE;
+    }
+}
+
+bool AEnemyBase::TryGetNearestPatrolSplinePointIndex(const FVector& WorldLocation, int32& OutIndex, float& OutDistSq) const
+{
+    OutIndex = INDEX_NONE;
+    OutDistSq = 0.0f;
+
+    UObject* ProviderObject = ResolvePatrolRouteProviderObject();
+    if (!ProviderObject)
+    {
+        return false;
+    }
+
+    return IPatrolRouteProvider::Execute_GetNearestSplineControlPointIndex(
+        ProviderObject,
+        WorldLocation,
+        OutIndex,
+        OutDistSq);
+}
+
+UObject* AEnemyBase::ResolvePatrolRouteProviderObject() const
+{
+    if (IsValid(PatrolRouteProviderActor))
+    {
+        TInlineComponentArray<UActorComponent*> Components(PatrolRouteProviderActor);
+        for (UActorComponent* Comp : Components)
+        {
+            if (IsValid(Comp) && Comp->GetClass()->ImplementsInterface(UPatrolRouteProvider::StaticClass()))
+            {
+                // UE_LOG(LogAIPatrolRoute, Verbose, TEXT("[%s] Using provider component interface: %s on %s"), *GetNameSafe(this), *GetNameSafe(Comp), *GetNameSafe(PatrolRouteProviderActor));
+                // UE_LOG(LogTemp, Warning, TEXT("[PatrolRoute] %s resolved provider component: %s"), *GetNameSafe(this), *GetNameSafe(Comp));
+                return Comp;
+            }
+        }
+
+        if (PatrolRouteProviderActor->GetClass()->ImplementsInterface(UPatrolRouteProvider::StaticClass()))
+        {
+            // UE_LOG(LogAIPatrolRoute, Verbose, TEXT("[%s] Using provider actor interface: %s"), *GetNameSafe(this), *GetNameSafe(PatrolRouteProviderActor));
+            // UE_LOG(LogTemp, Warning, TEXT("[PatrolRoute] %s resolved provider actor interface: %s"), *GetNameSafe(this), *GetNameSafe(PatrolRouteProviderActor));
+            return PatrolRouteProviderActor;
+        }
+
+        // UE_LOG(LogAIPatrolRoute, Warning, TEXT("[%s] PatrolRouteProviderActor set (%s) but no interface found on actor or components."),
+        //     *GetNameSafe(this), *GetNameSafe(PatrolRouteProviderActor));
+        // UE_LOG(LogTemp, Warning, TEXT("[PatrolRoute] %s provider actor has no interface/component: %s"),
+        //     *GetNameSafe(this), *GetNameSafe(PatrolRouteProviderActor));
+    }
+
+    if (IsValid(AssignedPatrolPath) && AssignedPatrolPath->GetClass()->ImplementsInterface(UPatrolRouteProvider::StaticClass()))
+    {
+        // UE_LOG(LogAIPatrolRoute, Verbose, TEXT("[%s] Fallback to AssignedPatrolPath provider: %s"), *GetNameSafe(this), *GetNameSafe(AssignedPatrolPath));
+        return AssignedPatrolPath;
+    }
+
+    // UE_LOG(LogAIPatrolRoute, Warning, TEXT("[%s] No patrol provider. PatrolRouteProviderActor=%s AssignedPatrolPath=%s"),
+    //     *GetNameSafe(this), *GetNameSafe(PatrolRouteProviderActor), *GetNameSafe(AssignedPatrolPath));
+    return nullptr;
 }
 
 // 设置状态标签 
