@@ -23,6 +23,7 @@
 #include "Animation/AnimSequence.h"
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimInstance.h"
+#include "Components/WidgetComponent.h"
 #include "Data/SIZZ_CustomIndicatorRefreshValue.h"
 #include "Data/SIZZ_IndicatorBehaviourDefinition.h"
 #include "Decals/SIZZ_DecalBaseActor.h"
@@ -666,6 +667,13 @@ void AEnemyAIController::TickDetection()
         Alertness -= AlertDecayRate * Dt;
 
     Alertness = FMath::Clamp(Alertness, 0.f, MaxAlertness);
+    if (AEnemyBase* EnemyForWidget = Cast<AEnemyBase>(GetPawn()))
+    {
+        if (EnemyForWidget->AlertBarWidgetComp)
+        {
+            EnemyForWidget->AlertBarWidgetComp->SetVisibility(Alertness > KINDA_SMALL_NUMBER, true);
+        }
+    }
     const bool bChasing = (Alertness >= ChaseThreshold);
     const bool bAlertFull = MaxAlertness > KINDA_SMALL_NUMBER && Alertness >= MaxAlertness - KINDA_SMALL_NUMBER;
     if(bAlertFull)

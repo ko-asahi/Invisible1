@@ -6,6 +6,7 @@
 #include "GameFramework/Character.h"
 #include "Enemy/PatrolPath.h"
 #include "Enemy/PatrolRouteProvider.h"
+#include "Enemy/AlertnessProvider.h"
 #include "GameplayTagAssetInterface.h"
 #include "GameplayTagContainer.h"
 #include "Enemy/Interaction/AIInteractionTypes.h"
@@ -186,7 +187,7 @@ struct FTraitPanelFormatSettings
 
 
 UCLASS()
-class INVISIBLE_API AEnemyBase : public ACharacter, public IGameplayTagAssetInterface
+class INVISIBLE_API AEnemyBase : public ACharacter, public IGameplayTagAssetInterface, public IAlertnessProvider
 {
 	GENERATED_BODY()
 
@@ -201,6 +202,10 @@ protected:
 public:	
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
+
+    // =====警戒值接口（供 WidgetComponent 直接从 Owner 获取）=====
+    virtual float GetAlertness_Implementation() const override;
+    virtual float GetAlertnessNormalized_Implementation() const override;
 
 	// Called to bind functionality to input
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;

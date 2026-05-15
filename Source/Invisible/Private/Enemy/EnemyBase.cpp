@@ -112,6 +112,18 @@ void AEnemyBase::Tick(float DeltaTime)
     }
 }
 
+float AEnemyBase::GetAlertness_Implementation() const
+{
+    const AEnemyAIController* EnemyController = Cast<AEnemyAIController>(GetController());
+    return EnemyController ? EnemyController->GetAlertness() : 0.0f;
+}
+
+float AEnemyBase::GetAlertnessNormalized_Implementation() const
+{
+    const AEnemyAIController* EnemyController = Cast<AEnemyAIController>(GetController());
+    return EnemyController ? EnemyController->GetAlertnessNormalized() : 0.0f;
+}
+
 // Called to bind functionality to input
 void AEnemyBase::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {

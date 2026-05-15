@@ -39,6 +39,11 @@ void AInvisible_GameModeBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 // 开始游戏结束
 void AInvisible_GameModeBase::BeginGameOver(AEnemyBase* KillerEnemy)
 {
+    BeginGameOverWithDelay(KillerEnemy, GameOverFallbackDelay);
+}
+
+void AInvisible_GameModeBase::BeginGameOverWithDelay(AEnemyBase* KillerEnemy, float FinishDelay)
+{
     if(bGameOverStarted) return;
 
     
@@ -53,7 +58,13 @@ void AInvisible_GameModeBase::BeginGameOver(AEnemyBase* KillerEnemy)
 
     if(UWorld* World = GetWorld())
     {
-        const float Delay = FMath::Max(GameOverFallbackDelay, 0.0f);
+        const float Delay = FMath::Max(FinishDelay, 0.0f);
+        if (Delay <= KINDA_SMALL_NUMBER)
+        {
+            FinishGameOverSequence();
+            return;
+        }
+
         World->GetTimerManager().SetTimer(
             GameOverFallbackTimerHandle,
             this,

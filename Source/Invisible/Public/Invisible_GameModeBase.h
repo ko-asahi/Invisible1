@@ -34,6 +34,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category="GameOver")
 	void BeginGameOver(AEnemyBase* KillerEnemy);
 
+	// 使用指定延迟开始游戏结束（适用于没有结束动画的触发源，例如监控摄像头）
+	UFUNCTION(BlueprintCallable, Category="GameOver")
+	void BeginGameOverWithDelay(AEnemyBase* KillerEnemy, float FinishDelay);
+
 	// 结束游戏结束
 	UFUNCTION(BlueprintCallable, Category="GameOver")
 	void FinishGameOverSequence();
