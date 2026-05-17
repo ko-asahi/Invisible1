@@ -31,6 +31,9 @@ public:
 	UPROPERTY(VisibleAnywhere,Category="Decal")
 	TObjectPtr<UArrowComponent> ArrowForwardX;
 
+	UFUNCTION(BlueprintCallable, Category="Decal")
+    void SetIndicatorProgress(float NormalizedProgress);
+
 /** Delegates */
 	
 	UPROPERTY(BlueprintAssignable,Category="Decal")

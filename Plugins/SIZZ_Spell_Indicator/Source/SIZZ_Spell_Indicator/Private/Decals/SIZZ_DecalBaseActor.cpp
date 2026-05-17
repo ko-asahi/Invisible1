@@ -76,7 +76,7 @@ void ASIZZ_DecalBaseActor::FinishIndicatorLifetime()
 
 void ASIZZ_DecalBaseActor::UpdateIndicatorMaterial()
 {
-	if(!DynamicMaterial) return;
+	if(!DynamicMaterial || MaterialParameterInfo.Name.IsNone()) return;
 	
 	CurrentMaterialValue = FMath::Clamp(CurrentMaterialValue + RefreshValue,0,1);
 	DynamicMaterial->SetScalarParameterValue(MaterialParameterInfo.Name,DataIndicatorBehaviourDefinition->IndicatorAnimationCurve->GetFloatValue(CurrentMaterialValue));
@@ -142,3 +142,31 @@ void ASIZZ_DecalBaseActor::FlipDecal() const
 	GetDecal()->AddRelativeRotation({0,0,180});
 }
 
+
+void ASIZZ_DecalBaseActor::SetIndicatorProgress(float NormalizedProgress)
+{
+    if (!DynamicMaterial)
+    {
+        return;
+    }
+
+    if (UWorld* World = GetWorld())
+    {
+        World->GetTimerManager().ClearTimer(IndicatorUpdateValueTimer);
+    }
+
+    CurrentMaterialValue = FMath::Clamp(NormalizedProgress, 0.0f, 1.0f);
+    const float MaterialValue = DataIndicatorBehaviourDefinition && DataIndicatorBehaviourDefinition->IndicatorAnimationCurve
+        ? DataIndicatorBehaviourDefinition->IndicatorAnimationCurve->GetFloatValue(CurrentMaterialValue)
+        : CurrentMaterialValue;
+
+    if (!MaterialParameterInfo.Name.IsNone())
+    {
+        DynamicMaterial->SetScalarParameterValue(
+            MaterialParameterInfo.Name,
+            MaterialValue
+        );
+    }
+
+    DynamicMaterial->SetScalarParameterValue(TEXT("MainRadius"), MaterialValue);
+}

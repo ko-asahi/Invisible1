@@ -667,6 +667,21 @@ void AEnemyAIController::TickDetection()
         Alertness -= AlertDecayRate * Dt;
 
     Alertness = FMath::Clamp(Alertness, 0.f, MaxAlertness);
+
+    const float AlertProgress = MaxAlertness > KINDA_SMALL_NUMBER ? Alertness / MaxAlertness : 0.0f;
+    if (IsValid(NearSightIndicatorActor))
+    {
+        NearSightIndicatorActor->SetIndicatorProgress(AlertProgress);
+    }
+    if (IsValid(MidSightIndicatorActor))
+    {
+        MidSightIndicatorActor->SetIndicatorProgress(AlertProgress);
+    }
+    if (IsValid(FarSightIndicatorActor))
+    {
+        FarSightIndicatorActor->SetIndicatorProgress(AlertProgress);
+    }
+    
     if (AEnemyBase* EnemyForWidget = Cast<AEnemyBase>(GetPawn()))
     {
         if (EnemyForWidget->AlertBarWidgetComp)

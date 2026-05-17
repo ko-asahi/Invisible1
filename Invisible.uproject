@@ -26,6 +26,14 @@
 		{
 		"Name": "MotionWarping",
 		"Enabled": true
+		},
+		{
+			"Name": "GameplayAbilities",
+			"Enabled": true
+		},
+		{
+			"Name": "RTSUnitTemplate",
+			"Enabled": false
 		}
 	]
 }

@@ -20,6 +20,7 @@
 #include "Enemy/Trait/TraitActionResolver.h"
 #include "Enemy/Trait/TraitActionProfile.h"
 #include "Enemy/Interface/TraitTargetInterface.h"
+#include "Interaction/CameraPowerSwitch.h"
 #include "Interaction/InteractionTargetComponent.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogAIInteractionDebug, Log, All);
@@ -278,6 +279,11 @@ void AInvisiblePlayerController::SetupInputComponent()
     {
         EnhancedInputComponent->BindAction(RunAction, ETriggerEvent::Started,   this, &AInvisiblePlayerController::OnRunStarted);
         EnhancedInputComponent->BindAction(RunAction, ETriggerEvent::Completed, this, &AInvisiblePlayerController::OnRunCompleted);
+    }
+
+    if (InteractAction)
+    {
+        EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &AInvisiblePlayerController::OnInteractPressed);
     }
 
     // 删除已锁定路径按键
@@ -720,6 +726,46 @@ void AInvisiblePlayerController::OnRunCompleted()
 
     UE_LOG(LogTemp, Log, TEXT("奔跑结束"));
     
+}
+
+void AInvisiblePlayerController::OnInteractPressed()
+{
+    if (bGameplayInputLocked || bIsEditMode)
+    {
+        return;
+    }
+
+    APawn* ControlledPawn = GetPawn();
+    if (!ControlledPawn)
+    {
+        return;
+    }
+
+    TArray<AActor*> FoundSwitches;
+    UGameplayStatics::GetAllActorsOfClass(this, ACameraPowerSwitch::StaticClass(), FoundSwitches);
+
+    ACameraPowerSwitch* BestSwitch = nullptr;
+    float BestDistSq = TNumericLimits<float>::Max();
+    for (AActor* FoundActor : FoundSwitches)
+    {
+        ACameraPowerSwitch* SwitchActor = Cast<ACameraPowerSwitch>(FoundActor);
+        if (!SwitchActor || !SwitchActor->CanBeActivatedByPawn(ControlledPawn))
+        {
+            continue;
+        }
+
+        const float DistSq = FVector::DistSquared2D(ControlledPawn->GetActorLocation(), SwitchActor->GetActorLocation());
+        if (DistSq < BestDistSq)
+        {
+            BestDistSq = DistSq;
+            BestSwitch = SwitchActor;
+        }
+    }
+
+    if (BestSwitch)
+    {
+        BestSwitch->TryActivateSwitch(ControlledPawn);
+    }
 }
 
 // =====编辑模式=====

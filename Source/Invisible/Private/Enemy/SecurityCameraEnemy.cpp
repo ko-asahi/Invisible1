@@ -6,11 +6,95 @@
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "Invisible_GameModeBase.h"
+#include "InvisiblePlayerController.h"
 #include "Kismet/GameplayStatics.h"
+#include "Data/SIZZ_IndicatorBehaviourDefinition.h"
+#include "Data/SIZZ_CustomIndicatorRefreshValue.h"
+#include "Decals/SIZZ_DecalBaseActor.h"
+#include "SpellIndicatorLibrary/SIZZ_SpellIndicatorLibrary.h"
+
+namespace
+{
+bool IsSafeSightIndicatorDefinition(const USIZZ_IndicatorBehaviourDefinition* IndicatorDefinition)
+{
+    return IndicatorDefinition
+        && IndicatorDefinition->IndicatorClassToSpawn
+        && IndicatorDefinition->IndicatorMaterial
+        && IndicatorDefinition->IndicatorAnimationCurve
+        && IndicatorDefinition->RefreshData
+        && IndicatorDefinition->RefreshData->RefreshValue > 0.0f;
+}
+
+ASIZZ_DecalBaseActor* SpawnSightIndicatorConeByReflection(
+    UObject* WorldObjContext,
+    USIZZ_IndicatorBehaviourDefinition* IndicatorDefinition,
+    const FVector& Position,
+    const FRotator& Rotation,
+    float Time,
+    float Height,
+    float Width)
+{
+    UClass* LibraryClass = USIZZ_SpellIndicatorLibrary::StaticClass();
+    if (!LibraryClass)
+    {
+        return nullptr;
+    }
+
+    UFunction* SpawnFunc = LibraryClass->FindFunctionByName(TEXT("SpawnIndicatorCone"));
+    if (!SpawnFunc)
+    {
+        return nullptr;
+    }
+
+    struct FSpawnIndicatorConeParams
+    {
+        UObject* WorldObjContext = nullptr;
+        USIZZ_IndicatorBehaviourDefinition* IndicatorDefinition = nullptr;
+        FVector Position = FVector::ZeroVector;
+        FRotator Rotation = FRotator::ZeroRotator;
+        float Time = 1.0f;
+        float Height = 100.0f;
+        float Width = 100.0f;
+        bool bOffsetByWidth = true;
+        bool bFlipCone = false;
+        ASIZZ_DecalBaseActor* ReturnValue = nullptr;
+    };
+
+    FSpawnIndicatorConeParams Params;
+    Params.WorldObjContext = WorldObjContext;
+    Params.IndicatorDefinition = IndicatorDefinition;
+    Params.Position = Position;
+    Params.Rotation = Rotation;
+    Params.Time = Time;
+    Params.Height = Height;
+    Params.Width = Width;
+    Params.bOffsetByWidth = true;
+    Params.bFlipCone = false;
+
+    UObject* LibraryCDO = LibraryClass->GetDefaultObject();
+    if (!LibraryCDO)
+    {
+        return nullptr;
+    }
+
+    LibraryCDO->ProcessEvent(SpawnFunc, &Params);
+    return Params.ReturnValue;
+}
+
+void SetSightIndicatorHiddenState(ASIZZ_DecalBaseActor* Indicator, bool bHidden)
+{
+    if (IsValid(Indicator))
+    {
+        Indicator->SetActorHiddenInGame(bHidden);
+        Indicator->SetActorEnableCollision(false);
+        Indicator->SetActorTickEnabled(false);
+    }
+}
+}
 
 ASecurityCameraEnemy::ASecurityCameraEnemy()
 {
-    PrimaryActorTick.bCanEverTick = false;
+    PrimaryActorTick.bCanEverTick = true;
 
     Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
     RootComponent = Root;
@@ -35,6 +119,7 @@ void ASecurityCameraEnemy::BeginPlay()
 
     DetectionInterval = FMath::Clamp(DetectionInterval, 0.02f, 1.0f);
     UpdateAlertWidgetVisibility();
+    CreateSightIndicator();
     EvaluateDetection();
 
     if (UWorld* World = GetWorld())
@@ -55,7 +140,16 @@ void ASecurityCameraEnemy::EndPlay(const EEndPlayReason::Type EndPlayReason)
         World->GetTimerManager().ClearTimer(DetectionTimerHandle);
     }
 
+    DestroySightIndicator();
+
     Super::EndPlay(EndPlayReason);
+}
+
+void ASecurityCameraEnemy::Tick(float DeltaSeconds)
+{
+    Super::Tick(DeltaSeconds);
+
+    UpdateSightIndicatorTransform();
 }
 
 float ASecurityCameraEnemy::GetAlertnessNormalized_Implementation() const
@@ -63,8 +157,36 @@ float ASecurityCameraEnemy::GetAlertnessNormalized_Implementation() const
     return MaxAlertness > 0.0f ? Alertness / MaxAlertness : 0.0f;
 }
 
+void ASecurityCameraEnemy::SetCameraDisabled(bool bDisabled)
+{
+    if (bCameraDisabled == bDisabled)
+    {
+        return;
+    }
+
+    bCameraDisabled = bDisabled;
+    bPlayerInSight = false;
+
+    if (bCameraDisabled)
+    {
+        Alertness = 0.0f;
+    }
+
+    UpdateSightIndicatorVisibility();
+    UpdateAlertWidgetVisibility();
+}
+
 void ASecurityCameraEnemy::EvaluateDetection()
 {
+    if (bCameraDisabled)
+    {
+        bPlayerInSight = false;
+        Alertness = 0.0f;
+        UpdateSightIndicatorVisibility();
+        UpdateAlertWidgetVisibility();
+        return;
+    }
+
     if (bGameOverTriggered)
     {
         return;
@@ -79,9 +201,20 @@ void ASecurityCameraEnemy::EvaluateDetection()
         }
     }
 
+    if (const AInvisiblePlayerController* PlayerController = Cast<AInvisiblePlayerController>(UGameplayStatics::GetPlayerController(this, 0)))
+    {
+        if (PlayerController->bIsEditMode)
+        {
+            bPlayerInSight = false;
+            UpdateSightIndicatorVisibility();
+            return;
+        }
+    }
+
     float Distance = 0.0f;
     const bool bInSight = IsPlayerInSightInternal(Distance);
     bPlayerInSight = bInSight;
+    UpdateSightIndicatorVisibility();
 
     const float Dt = FMath::Max(DetectionInterval, KINDA_SMALL_NUMBER);
     if (bInSight)
@@ -94,6 +227,13 @@ void ASecurityCameraEnemy::EvaluateDetection()
     }
 
     Alertness = FMath::Clamp(Alertness, 0.0f, MaxAlertness);
+
+    const float AlertProgress = MaxAlertness > KINDA_SMALL_NUMBER ? Alertness / MaxAlertness : 0.0f;
+    if (IsValid(SightIndicatorActor))
+    {
+        SightIndicatorActor->SetIndicatorProgress(AlertProgress);
+    }
+
     UpdateAlertWidgetVisibility();
 
     if (Alertness >= MaxAlertness - KINDA_SMALL_NUMBER)
@@ -200,4 +340,97 @@ void ASecurityCameraEnemy::UpdateAlertWidgetVisibility() const
     }
 
     AlertBarWidgetComp->SetVisibility(Alertness > KINDA_SMALL_NUMBER);
+}
+
+bool ASecurityCameraEnemy::ShouldShowSightIndicator() const
+{
+    if (!bEnableSightIndicator)
+    {
+        return false;
+    }
+
+    if (bOnlyShowSightIndicatorInEditor)
+    {
+#if WITH_EDITOR
+        return true;
+#else
+        return false;
+#endif
+    }
+
+    return true;
+}
+
+void ASecurityCameraEnemy::CreateSightIndicator()
+{
+    DestroySightIndicator();
+
+    if (!ShouldShowSightIndicator() || !IsSafeSightIndicatorDefinition(SightIndicatorDefinition))
+    {
+        return;
+    }
+
+    const FVector SightLocation = (CameraMesh ? CameraMesh->GetComponentLocation() : GetActorLocation()) + FVector(0.0f, 0.0f, SightIndicatorZOffset);
+    const FRotator SightRotation = GetActorRotation() + FRotator(0.0f, -90.0f, 0.0f);
+    const float SafeHeight = FMath::Max(SightRadius, 1.0f);
+    const float VisualHalfAngle = FMath::Clamp(HalfViewAngle * FMath::Max(SightIndicatorHalfAngleScale, 0.1f), 1.0f, 89.0f);
+    const float SafeWidth = FMath::Max(SafeHeight * FMath::Tan(FMath::DegreesToRadians(VisualHalfAngle)), 1.0f);
+    const float Lifetime = FMath::Max(SightIndicatorLifetime, 0.1f);
+
+    SightIndicatorActor = SpawnSightIndicatorConeByReflection(
+        this,
+        SightIndicatorDefinition,
+        SightLocation,
+        SightRotation,
+        Lifetime,
+        SafeHeight,
+        SafeWidth);
+
+    UpdateSightIndicatorTransform();
+    UpdateSightIndicatorVisibility();
+}
+
+void ASecurityCameraEnemy::UpdateSightIndicatorTransform() const
+{
+    if (!IsValid(SightIndicatorActor) || !ShouldShowSightIndicator())
+    {
+        return;
+    }
+
+    const FVector SightLocation = (CameraMesh ? CameraMesh->GetComponentLocation() : GetActorLocation()) + FVector(0.0f, 0.0f, SightIndicatorZOffset);
+    const FRotator SightRotation = GetActorRotation() + FRotator(0.0f, -90.0f, 0.0f);
+    SightIndicatorActor->SetActorLocation(SightLocation);
+    SightIndicatorActor->SetActorRotation(SightRotation);
+}
+
+void ASecurityCameraEnemy::DestroySightIndicator()
+{
+    if (IsValid(SightIndicatorActor))
+    {
+        SightIndicatorActor->Destroy();
+    }
+    SightIndicatorActor = nullptr;
+}
+
+void ASecurityCameraEnemy::UpdateSightIndicatorVisibility() const
+{
+    if (!IsValid(SightIndicatorActor))
+    {
+        return;
+    }
+
+    if (bHideSightIndicatorWhenNoVisualContact)
+    {
+        const bool bSelectedOverride =
+#if WITH_EDITOR
+            bShowSightIndicatorWhenSelected && IsSelectedInEditor();
+#else
+            false;
+#endif
+        SetSightIndicatorHiddenState(SightIndicatorActor, !(bPlayerInSight || bSelectedOverride));
+    }
+    else
+    {
+        SetSightIndicatorHiddenState(SightIndicatorActor, false);
+    }
 }

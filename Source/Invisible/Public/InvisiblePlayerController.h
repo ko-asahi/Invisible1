@@ -158,6 +158,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input|FollowMode")
 	UInputAction* RunAction;
 
+	// 交互输入按键（例如使用开关）
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input|FollowMode")
+	UInputAction* InteractAction;
+
 	// 当前是否处于奔跑状态
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input|FollowMode")
 	bool bIsRunning = false;
@@ -385,6 +389,9 @@ protected:
 
 	// 奔跑状态结束
 	void OnRunCompleted();
+
+	// 交互按键
+	void OnInteractPressed();
 
 
 	// =====编辑模式输入=====
